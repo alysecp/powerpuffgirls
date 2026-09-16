@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="googlebot" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Passport Panic</title>
+<style>
+  /* ===================== CLIENT / UI LAYER (styling) ===================== */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0f380f;
+    font-family: 'Courier New', Courier, monospace;
+    color: #9bbc0f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #app {
+    width: 480px;
+    border: 6px solid #306230;
+    border-radius: 10px;
+    background: #0f380f;
+    box-shadow: 0 0 0 4px #0f380f, 0 0 20px rgba(0,0,0,0.6);
+    padding: 8px;
+  }
+  #hud {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    background: #306230;
+    color: #9bbc0f;
+    padding: 6px 8px;
+    font-size: 13px;
+    font-weight: bold;
+    border: 2px solid #0f380f;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+  }
+  #hud span { margin-right: 8px; }
+  #canvasWrap {
+    position: relative;
+    margin-top: 6px;
+    border: 3px solid #306230;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    background: #8bac0f;
+    image-rendering: pixelated;
+    width: 100%;
+    height: auto;
+  }
+  #flashOverlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #ff0000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.08s linear;
+  }
+  #flashOverlay.active { opacity: 0.45; }
+
+  #dialogBox {
+    margin-top: 6px;
+    min-height: 54px;
+    background: #0f380f;
+    border: 3px solid #9bbc0f;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #9bbc0f;
+  }
+  #dialogBox.hidden { display: none; }
+  #dialogBox .hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    opacity: 0.7;
+  }
+
+  #controlsHint {
+    margin-top: 6px;
+    font-size: 11px;
+    text-align: center;
+    color: #8bac0f;
+  }
+
+  /* ---- Modal overlays (quiz / game over) ---- */
+  .modalOverlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 56, 15, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+  .modalOverlay.hidden { display: none; }
+  .modalBox {
+    width: 380px;
+    max-width: 90vw;
+    background: #0f380f;
+    border: 4px solid #9bbc0f;
+    border-radius: 8px;
+    padding: 18px;
+    text-align: center;
+  }
+  .modalBox h2 {
+    margin: 0 0 10px 0;
+    color: #9bbc0f;
+    font-size: 18px;
+  }
+  .modalBox p { font-size: 13px; margin: 8px 0 14px 0; }
+  .quizOption {
+    display: block;
+    width: 100%;
+    margin: 8px 0;
+    padding: 10px;
+    font-family: inherit;
+    font-size: 13px;
+    background: #306230;
+    color: #9bbc0f;
+    border: 2px solid #9bbc0f;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .quizOption:hover { background: #8bac0f; color: #0f380f; }
+  .quizProgress { font-size: 11px; opacity: 0.8; margin-bottom: 6px; }
+
+  #restartBtn {
+    margin-top: 10px;
+    padding: 10px 20px;
+    font-family: inherit;
+    font-size: 14px;
+    background: #8bac0f;
+    color: #0f380f;
+    border: 2px solid #0f380f;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  #restartBtn:hover { background: #9bbc0f; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- ===================== CLIENT / UI: HUD ===================== -->
+  <div id="hud">
+    <span id="hudCountry">Country: Japan</span>
+    <span id="hudRisk">Risk: 0%</span>
+    <span id="hudStamps">Stamps: 0</span>
+    <span id="hudLevel">Level: 1</span>
+  </div>
+
+  <div id="canvasWrap">
+    <canvas id="game" width="480" height="360"></canvas>
+    <div id="flashOverlay"></div>
+  </div>
+
+  <!-- Bottom dialogue box: clue text / hazard messages / officer messages -->
+  <div id="dialogBox" class="hidden">
+    <span id="dialogText"></span>
+    <span class="hint">[Space / Z to continue]</span>
+  </div>
+
+  <div id="controlsHint">Move: WASD / Arrow Keys &nbsp;|&nbsp; Interact: Space / Z</div>
+</div>
+
+<!-- ===================== CLIENT / UI: Quiz Modal ===================== -->
+<div id="quizModal" class="modalOverlay hidden">
+  <div class="modalBox">
+    <div class="quizProgress" id="quizProgress">Question 1 of 2</div>
+    <h2 id="quizCountryName">Customs Check</h2>
+    <p id="quizQuestion"></p>
+    <button class="quizOption" id="quizOptionA"></button>
+    <button class="quizOption" id="quizOptionB"></button>
+  </div>
+</div>
+
+<!-- ===================== CLIENT / UI: Game Over Modal ===================== -->
+<div id="gameOverModal" class="modalOverlay hidden">
+  <div class="modalBox">
+    <h2>DEPORTED!</h2>
+    <p>Your Risk Meter hit 100%. Customs has revoked your travel privileges.</p>
+    <p id="gameOverStats"></p>
+    <button id="restartBtn">Restart Journey</button>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   PASSPORT PANIC — GB-Style Cultural Customs Game
+   Single self-contained file. Vanilla JS + Canvas2D (no build step).
+
+   Architecture (per project conventions):
+   - DATA LAYER: LEVELS array below + tunable constants (all game content
+     and difficulty numbers live here, edit freely without touching logic)
+   - LOGIC / MIDDLEWARE: state machine, movement, collision, quiz flow,
+     risk-meter math
+   - CLIENT / UI: canvas rendering + DOM HUD/dialog/modals (above)
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   DATA LAYER: fixed GB 4-color palette (NEVER add new colors — only
+   reassign which shade is used as a level's "accent")
+--------------------------------------------------------------------- */
+const PALETTE = {
+  darkest:  '#0f380f',
+  dark:     '#306230',
+  light:    '#8bac0f',
+  lightest: '#9bbc0f'
+};
+// Accent rotation pool used by LEVELS (index % 4)
+const ACCENT_POOL = [PALETTE.lightest, PALETTE.dark, PALETTE.light, PALETTE.darkest];
+
+/* ---------------------------------------------------------------------
+   DATA LAYER: tunable difficulty constants — edit these, not the logic
+--------------------------------------------------------------------- */
+const HAZARD_BASE_DAMAGE = 35;   // % risk added by a hazard hit on Level 1
+const HAZARD_DAMAGE_STEP = 5;    // % extra damage added per level index beyond 1
+const RISK_REDUCTION_ON_PASS = 20; // % risk removed for passing a level's quiz
+const RISK_MAX = 100;
+
+/* ---------------------------------------------------------------------
+   DATA LAYER: all 20 country levels in fixed rotation order.
+   Levels 1-5 are fully authored with real cultural facts + quizzes.
+   Levels 6-20 are placeholders (same structure/behavior, swap-in-ready).
+   Each level: { country, accent, clue1, clue2, quiz: [ {q, options:[a,b], correct}, ... ] }
+--------------------------------------------------------------------- */
+const LEVELS = [
+  // 1 - JAPAN (built)
+  {
+    country: "Japan",
+    accent: ACCENT_POOL[0 % 4],
+    clue1: "In Japan, it's customary to remove your shoes before entering someone's home.",
+    clue2: "Bowing is a traditional greeting in Japan, often used in place of handshakes in formal situations.",
+    quiz: [
+      { q: "Before entering a home in Japan, what should you do?", options: ["Remove your shoes", "Keep your shoes on"], correct: 0 },
+      { q: "What is a traditional greeting in Japan?", options: ["A big hug", "A bow"], correct: 1 }
+    ]
+  },
+  // 2 - FRANCE (built)
+  {
+    country: "France",
+    accent: ACCENT_POOL[1 % 4],
+    clue1: "In France, it's polite to greet shopkeepers with 'Bonjour' before starting any conversation.",
+    clue2: "Bread such as a baguette is traditionally placed directly on the table, not on a separate plate.",
+    quiz: [
+      { q: "What should you say when entering a French shop?", options: ["Nothing at all", "Bonjour"], correct: 1 },
+      { q: "Where is bread traditionally placed at a French table?", options: ["Directly on the table", "Only on your plate"], correct: 0 }
+    ]
+  },
+  // 3 - EGYPT (built)
+  {
+    country: "Egypt",
+    accent: ACCENT_POOL[2 % 4],
+    clue1: "In Egypt, it's customary to accept tea or coffee when offered as a guest, since declining can seem impolite.",
+    clue2: "Many people in Egypt eat and pass food with the right hand, as the left hand is traditionally seen as unclean.",
+    quiz: [
+      { q: "As a guest in Egypt, if offered tea you should:", options: ["Accept it politely", "Refuse it immediately"], correct: 0 },
+      { q: "Which hand is traditionally used for eating in Egypt?", options: ["The left hand", "The right hand"], correct: 1 }
+    ]
+  },
+  // 4 - ITALY (built)
+  {
+    country: "Italy",
+    accent: ACCENT_POOL[3 % 4],
+    clue1: "In Italy, cappuccino is traditionally a breakfast drink and is rarely ordered after 11am or with a meal.",
+    clue2: "During meals in Italy, it's considered polite to keep your hands visible above the table, not in your lap.",
+    quiz: [
+      { q: "When is cappuccino traditionally consumed in Italy?", options: ["In the morning", "Right after dinner"], correct: 0 },
+      { q: "Where should your hands stay during an Italian meal?", options: ["In your lap", "Visible above the table"], correct: 1 }
+    ]
+  },
+  // 5 - BRAZIL (built)
+  {
+    country: "Brazil",
+    accent: ACCENT_POOL[4 % 4],
+    clue1: "In Brazil, greetings often include a kiss on the cheek, and the number of kisses can vary by region.",
+    clue2: "The 'thumbs up' gesture is commonly used in Brazil to mean 'okay' or 'great'.",
+    quiz: [
+      { q: "How do people in Brazil often greet each other?", options: ["With a kiss on the cheek", "With a formal bow"], correct: 0 },
+      { q: "What does a 'thumbs up' commonly mean in Brazil?", options: ["Okay / great", "An insult"], correct: 0 }
+    ]
+  },
+  // 6-20 - PLACEHOLDERS (same structure & flow; swap real content in later)
+  { country: "India",        accent: ACCENT_POOL[5 % 4],  clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Mexico",       accent: ACCENT_POOL[6 % 4],  clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Thailand",     accent: ACCENT_POOL[7 % 4],  clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Morocco",      accent: ACCENT_POOL[8 % 4],  clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Germany",      accent: ACCENT_POOL[9 % 4],  clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "South Korea",  accent: ACCENT_POOL[10 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Greece",       accent: ACCENT_POOL[11 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Peru",         accent: ACCENT_POOL[12 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Turkey",       accent: ACCENT_POOL[13 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Kenya",        accent: ACCENT_POOL[14 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Norway",       accent: ACCENT_POOL[15 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Vietnam",      accent: ACCENT_POOL[16 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Spain",        accent: ACCENT_POOL[17 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "New Zealand",  accent: ACCENT_POOL[18 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]},
+  { country: "Argentina",    accent: ACCENT_POOL[19 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
+      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
+  ]}
+];
+
+/* ---------------------------------------------------------------------
+   DATA LAYER: fixed single-screen tile layout (re-used by every level;
+   never regenerated). Coordinates are canvas pixels (480x360 internal).
+--------------------------------------------------------------------- */
+const PLAYER_START = { x: 210, y: 300 };
+const PLAYER_SIZE = 28;
+
+const TILE_SIZE = 60;
+const LAYOUT = {
+  officer:  { x: 200, y: 26,  w: 80, h: 50, type: "officer" },
+  clue1:    { x: 36,  y: 138, w: TILE_SIZE, h: TILE_SIZE, type: "clue" },
+  clue2:    { x: 384, y: 138, w: TILE_SIZE, h: TILE_SIZE, type: "clue" },
+  hazard1:  { x: 36,  y: 262, w: TILE_SIZE, h: TILE_SIZE, type: "hazard" },
+  hazard2:  { x: 384, y: 262, w: TILE_SIZE, h: TILE_SIZE, type: "hazard" }
+};
+
+/* =====================================================================
+   LOGIC / MIDDLEWARE LAYER
+   ===================================================================== */
+
+// ---- Persistent run state (never resets on level transition, only on restart) ----
+let riskMeter = 0;
+let stamps = 0;
+let levelIndex = 1; // absolute level count across the whole run (keeps climbing past 20)
+let currentLevel = LEVELS[(levelIndex - 1) % LEVELS.length];
+
+// ---- Per-level transient state ----
+let player = { x: PLAYER_START.x, y: PLAYER_START.y };
+let hazardVisited = { hazard1: false, hazard2: false }; // reset each level load & when player leaves the tile
+
+// ---- Finite state machine: 'playing' | 'dialog' | 'quiz' | 'gameover' ----
+let gameState = 'playing';
+
+// Queued action to run once the current dialog box is dismissed (e.g. open quiz)
+let pendingAfterDialog = null;
+
+// ---- Input tracking ----
+const keysDown = new Set();
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const flashOverlay = document.getElementById('flashOverlay');
+
+const hudCountry = document.getElementById('hudCountry');
+const hudRisk = document.getElementById('hudRisk');
+const hudStamps = document.getElementById('hudStamps');
+const hudLevel = document.getElementById('hudLevel');
+
+const dialogBox = document.getElementById('dialogBox');
+const dialogText = document.getElementById('dialogText');
+
+const quizModal = document.getElementById('quizModal');
+const quizProgress = document.getElementById('quizProgress');
+const quizCountryName = document.getElementById('quizCountryName');
+const quizQuestion = document.getElementById('quizQuestion');
+const quizOptionA = document.getElementById('quizOptionA');
+const quizOptionB = document.getElementById('quizOptionB');
+
+const gameOverModal = document.getElementById('gameOverModal');
+const gameOverStats = document.getElementById('gameOverStats');
+const restartBtn = document.getElementById('restartBtn');
+
+/* ---------------------------------------------------------------------
+   Damage formula: base 35% on Level 1, +5% per level index thereafter.
+   Uses the ABSOLUTE level index (keeps scaling after the 20-country
+   rotation loops back around), not the looped country slot.
+--------------------------------------------------------------------- */
+function currentHazardDamage() {
+  return HAZARD_BASE_DAMAGE + HAZARD_DAMAGE_STEP * (levelIndex - 1);
+}
+
+function updateHUD() {
+  hudCountry.textContent = `Country: ${currentLevel.country}`;
+  hudRisk.textContent = `Risk: ${Math.round(riskMeter)}%`;
+  hudStamps.textContent = `Stamps: ${stamps}`;
+  hudLevel.textContent = `Level: ${levelIndex}`;
+}
+
+function loadLevel(idx) {
+  levelIndex = idx;
+  currentLevel = LEVELS[(levelIndex - 1) % LEVELS.length];
+  player.x = PLAYER_START.x;
+  player.y = PLAYER_START.y;
+  hazardVisited = { hazard1: false, hazard2: false };
+  updateHUD();
+}
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x &&
+         a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function playerRect() {
+  return { x: player.x, y: player.y, w: PLAYER_SIZE, h: PLAYER_SIZE };
+}
+
+function showDialog(message, after) {
+  dialogText.textContent = message;
+  dialogBox.classList.remove('hidden');
+  gameState = 'dialog';
+  pendingAfterDialog = after || null;
+}
+
+function dismissDialog() {
+  dialogBox.classList.add('hidden');
+  gameState = 'playing';
+  const next = pendingAfterDialog;
+  pendingAfterDialog = null;
+  if (next) next();
+}
+
+function flashRed() {
+  flashOverlay.classList.add('active');
+  setTimeout(() => flashOverlay.classList.remove('active'), 160);
+}
+
+function triggerHazard() {
+  const dmg = currentHazardDamage();
+  riskMeter = Math.min(RISK_MAX, riskMeter + dmg);
+  flashRed();
+  updateHUD();
+  if (riskMeter >= RISK_MAX) {
+    showDialog(`OUCH! A cultural misstep cost you ${dmg}% Risk!`, () => triggerGameOver());
+  } else {
+    showDialog(`OUCH! A cultural misstep cost you ${dmg}% Risk!`);
+  }
+}
+
+function triggerGameOver() {
+  gameState = 'gameover';
+  gameOverStats.textContent = `Final Level Reached: ${levelIndex} — Passport Stamps: ${stamps}`;
+  gameOverModal.classList.remove('hidden');
+}
+
+function restartGame() {
+  riskMeter = 0;
+  stamps = 0;
+  loadLevel(1);
+  gameOverModal.classList.add('hidden');
+  dialogBox.classList.add('hidden');
+  gameState = 'playing';
+}
+
+/* ---------------------------------------------------------------------
+   Quiz flow
+--------------------------------------------------------------------- */
+let quizQuestionIdx = 0;
+let quizCorrectCount = 0;
+
+function openQuiz() {
+  gameState = 'quiz';
+  quizQuestionIdx = 0;
+  quizCorrectCount = 0;
+  quizCountryName.textContent = `Customs Check — ${currentLevel.country}`;
+  renderQuizQuestion();
+  quizModal.classList.remove('hidden');
+}
+
+function renderQuizQuestion() {
+  const q = currentLevel.quiz[quizQuestionIdx];
+  quizProgress.textContent = `Question ${quizQuestionIdx + 1} of ${currentLevel.quiz.length}`;
+  quizQuestion.textContent = q.q;
+  quizOptionA.textContent = q.options[0];
+  quizOptionB.textContent = q.options[1];
+}
+
+function answerQuiz(selectedIndex) {
+  const q = currentLevel.quiz[quizQuestionIdx];
+  if (selectedIndex === q.correct) quizCorrectCount++;
+  quizQuestionIdx++;
+  if (quizQuestionIdx < currentLevel.quiz.length) {
+    renderQuizQuestion();
+  } else {
+    finishQuiz();
+  }
+}
+
+function finishQuiz() {
+  quizModal.classList.add('hidden');
+  const passed = quizCorrectCount === currentLevel.quiz.length;
+  if (passed) {
+    stamps++;
+    riskMeter = Math.max(0, riskMeter - RISK_REDUCTION_ON_PASS);
+    updateHUD();
+    const clearedCountry = currentLevel.country;
+    const nextIdx = levelIndex + 1;
+    showDialog(`Passport stamped for ${clearedCountry}! Risk -${RISK_REDUCTION_ON_PASS}%. Welcome to your next destination.`, () => {
+      loadLevel(nextIdx);
+    });
+  } else {
+    showDialog(`Quiz failed! The officer sends you back to review the clues and try again.`);
+  }
+}
+
+quizOptionA.addEventListener('click', () => answerQuiz(0));
+quizOptionB.addEventListener('click', () => answerQuiz(1));
+restartBtn.addEventListener('click', restartGame);
+
+/* ---------------------------------------------------------------------
+   Input handling
+--------------------------------------------------------------------- */
+const MOVE_KEYS = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD']);
+const INTERACT_KEYS = new Set(['Space','KeyZ']);
+
+window.addEventListener('keydown', (e) => {
+  if (MOVE_KEYS.has(e.code)) { keysDown.add(e.code); e.preventDefault(); }
+
+  if (INTERACT_KEYS.has(e.code) && !e.repeat) {
+    e.preventDefault();
+    handleInteract();
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  if (MOVE_KEYS.has(e.code)) keysDown.delete(e.code);
+});
+
+function handleInteract() {
+  if (gameState === 'dialog') {
+    dismissDialog();
+    return;
+  }
+  if (gameState !== 'playing') return; // ignore during quiz/gameover
+
+  const pRect = playerRect();
+
+  if (rectsOverlap(pRect, LAYOUT.officer)) {
+    openQuiz();
+    return;
+  }
+  if (rectsOverlap(pRect, LAYOUT.clue1)) {
+    showDialog(currentLevel.clue1);
+    return;
+  }
+  if (rectsOverlap(pRect, LAYOUT.clue2)) {
+    showDialog(currentLevel.clue2);
+    return;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Update loop: movement + automatic hazard detection
+--------------------------------------------------------------------- */
+const SPEED = 3;
+
+function update() {
+  if (gameState === 'playing') {
+    let dx = 0, dy = 0;
+    if (keysDown.has('ArrowUp') || keysDown.has('KeyW')) dy -= 1;
+    if (keysDown.has('ArrowDown') || keysDown.has('KeyS')) dy += 1;
+    if (keysDown.has('ArrowLeft') || keysDown.has('KeyA')) dx -= 1;
+    if (keysDown.has('ArrowRight') || keysDown.has('KeyD')) dx += 1;
+
+    if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; } // normalize diagonal speed
+
+    player.x = Math.max(4, Math.min(canvas.width - PLAYER_SIZE - 4, player.x + dx * SPEED));
+    player.y = Math.max(4, Math.min(canvas.height - PLAYER_SIZE - 4, player.y + dy * SPEED));
+
+    // Automatic hazard trigger on overlap (stepping onto the tile)
+    const pRect = playerRect();
+    ['hazard1', 'hazard2'].forEach((key) => {
+      const overlapping = rectsOverlap(pRect, LAYOUT[key]);
+      if (overlapping && !hazardVisited[key]) {
+        hazardVisited[key] = true;
+        triggerHazard();
+      } else if (!overlapping) {
+        hazardVisited[key] = false;
+      }
+    });
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Render loop (Canvas2D) — GB-blocky tiles, accent color per level
+--------------------------------------------------------------------- */
+function drawTile(tile, label, fillColor, textColor) {
+  ctx.fillStyle = fillColor;
+  ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+  ctx.strokeStyle = PALETTE.darkest;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(tile.x, tile.y, tile.w, tile.h);
+  ctx.fillStyle = textColor;
+  ctx.font = 'bold 26px Courier New';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, tile.x + tile.w / 2, tile.y + tile.h / 2 + 2);
+}
+
+function render() {
+  // Background
+  ctx.fillStyle = PALETTE.light;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Accent border frame representing current country theme
+  ctx.strokeStyle = currentLevel.accent;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
+
+  // Clue tiles
+  drawTile(LAYOUT.clue1, '?', PALETTE.lightest, PALETTE.darkest);
+  drawTile(LAYOUT.clue2, '?', PALETTE.lightest, PALETTE.darkest);
+
+  // Hazard tiles
+  drawTile(LAYOUT.hazard1, '!', PALETTE.darkest, PALETTE.lightest);
+  drawTile(LAYOUT.hazard2, '!', PALETTE.darkest, PALETTE.lightest);
+
+  // Officer / exit gate (accent colored)
+  drawTile(LAYOUT.officer, 'C', currentLevel.accent, PALETTE.darkest);
+  ctx.fillStyle = PALETTE.darkest;
+  ctx.font = 'bold 10px Courier New';
+  ctx.fillText('CUSTOMS', LAYOUT.officer.x + LAYOUT.officer.w / 2, LAYOUT.officer.y + LAYOUT.officer.h + 10);
+
+  // Player
+  ctx.fillStyle = PALETTE.darkest;
+  ctx.fillRect(player.x, player.y, PLAYER_SIZE, PLAYER_SIZE);
+  ctx.fillStyle = currentLevel.accent;
+  ctx.fillRect(player.x + 4, player.y + 4, PLAYER_SIZE - 8, PLAYER_SIZE - 8);
+}
+
+function gameLoop() {
+  update();
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+/* ---------------------------------------------------------------------
+   Boot
+--------------------------------------------------------------------- */
+loadLevel(1);
+gameLoop();
+</script>
+</body>
+</html>
