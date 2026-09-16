@@ -2087,7 +2087,7 @@ function drawWorldLandmark(type, country) {
   const pos = LAYOUT.landmarkPos;
   ctx.save();
   ctx.translate(pos.x, pos.y);
-  ctx.scale(6, 6);
+  ctx.scale(3, 3);
   ctx.fillStyle = currentLevel.accent;
   ctx.strokeStyle = currentLevel.accent;
   ctx.lineWidth = 0.8;
@@ -2100,11 +2100,11 @@ function drawWorldLandmark(type, country) {
   ctx.globalAlpha = 0.25;
   ctx.fillStyle = SCENE_PALETTE.stoneDark;
   ctx.beginPath();
-  ctx.ellipse(pos.x, pos.y + 118, 70, 14, 0, 0, Math.PI * 2);
+  ctx.ellipse(pos.x, pos.y + 59, 35, 7, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
-  drawTextLabel(country.toUpperCase(), pos.x, pos.y + 145);
+  drawTextLabel(country.toUpperCase(), pos.x, pos.y + 73);
 }
 
 // Soft drop-shadow ellipse shared by both characters.
