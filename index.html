@@ -1016,6 +1016,11 @@ let currentLevel = LEVELS[0]; // overwritten by loadLevel() before the title scr
 // come up once per random-selection cycle; see pickRandomCountryIndex().
 let visitedCountries = new Set();
 
+// The session read from localStorage at boot, captured BEFORE the boot-time
+// loadLevel() call below overwrites it — see the Boot section at the bottom
+// and continueBtn's handler, which must read this (not localStorage again).
+let savedSession = null;
+
 const DEFAULT_COUNTRY_IDX = 17; // Spain — every user starts here, no country picker
 
 // ---- Per-level transient state ----
@@ -1362,12 +1367,15 @@ startBtn.addEventListener('click', () => {
 // Continue-session prompt: shown at boot instead of the title screen when
 // a saved session exists (see boot section at the bottom of this script).
 continueBtn.addEventListener('click', () => {
-  const session = loadSession();
-  if (session) {
-    stamps = session.stamps;
-    vibeIndex = session.vibeIndex;
-    visitedCountries = new Set(session.visited || []);
-    loadLevel(session.levelIndex, session.countryListIdx); // restarts at the beginning of that level
+  // Use the session captured at boot, NOT a fresh localStorage read — by
+  // the time this click happens, the boot-time loadLevel() call below has
+  // already overwritten localStorage with the Spain/level-1 default, so
+  // re-reading here would silently ignore the player's actual saved progress.
+  if (savedSession) {
+    stamps = savedSession.stamps;
+    vibeIndex = savedSession.vibeIndex;
+    visitedCountries = new Set(savedSession.visited || []);
+    loadLevel(savedSession.levelIndex, savedSession.countryListIdx); // restarts at the beginning of that level
   }
   continuePrompt.classList.add('hidden');
   gameState = 'playing';
@@ -2283,7 +2291,7 @@ function gameLoop() {
    call itself triggers a save (via updateHUD()) that would otherwise
    overwrite the very session we're about to check for.
 --------------------------------------------------------------------- */
-const savedSession = loadSession();
+savedSession = loadSession();
 
 loadLevel(1, DEFAULT_COUNTRY_IDX); // default behind whichever screen shows next
 
