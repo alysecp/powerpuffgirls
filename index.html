@@ -132,7 +132,7 @@
   .quizOption:hover { background: #8bac0f; color: #0f380f; }
   .quizProgress { font-size: 11px; opacity: 0.8; margin-bottom: 6px; }
 
-  #restartBtn {
+  #restartBtn, #startBtn {
     margin-top: 10px;
     padding: 10px 20px;
     font-family: inherit;
@@ -144,7 +144,7 @@
     cursor: pointer;
     font-weight: bold;
   }
-  #restartBtn:hover { background: #9bbc0f; }
+  #restartBtn:hover, #startBtn:hover { background: #9bbc0f; }
 </style>
 </head>
 <body>
@@ -154,7 +154,7 @@
   <div id="hud">
     <span id="hudCountry">Country: Japan</span>
     <span>|</span>
-    <span id="hudRisk">Risk: 0%</span>
+    <span id="hudVibe">VIBE:50</span>
     <span>|</span>
     <span id="hudStamps">Stamps: 0</span>
     <span>|</span>
@@ -175,6 +175,18 @@
   <div id="controlsHint">Move: WASD / Arrow Keys &nbsp;|&nbsp; Interact: Space / Z</div>
 </div>
 
+<!-- ===================== CLIENT / UI: Title Screen ===================== -->
+<div id="titleScreen" class="modalOverlay">
+  <div class="modalBox">
+    <h2>Passport Panic</h2>
+    <p>1. Collect clues [?] to learn customs.</p>
+    <p>2. Avoid traps [!] - costs rise per level.</p>
+    <p>3. Pass Quizzes: Vibe reward rises too.</p>
+    <p>4. Vibe hits 0 = DEPORTED!</p>
+    <button id="startBtn">Start Journey</button>
+  </div>
+</div>
+
 <!-- ===================== CLIENT / UI: Quiz Modal ===================== -->
 <div id="quizModal" class="modalOverlay hidden">
   <div class="modalBox">
@@ -190,7 +202,7 @@
 <div id="gameOverModal" class="modalOverlay hidden">
   <div class="modalBox">
     <h2>DEPORTED!</h2>
-    <p>Your Risk Meter hit 100%. Customs has revoked your travel privileges.</p>
+    <p>Your Vibe hit 0. Entry denied.</p>
     <p id="gameOverStats"></p>
     <button id="restartBtn">Restart Journey</button>
   </div>
@@ -205,7 +217,7 @@
    - DATA LAYER: LEVELS array below + tunable constants (all game content
      and difficulty numbers live here, edit freely without touching logic)
    - LOGIC / MIDDLEWARE: state machine, movement, collision, quiz flow,
-     risk-meter math
+     vibe-index math
    - CLIENT / UI: canvas rendering + DOM HUD/dialog/modals (above)
    ===================================================================== */
 
@@ -223,12 +235,20 @@ const PALETTE = {
 const ACCENT_POOL = [PALETTE.lightest, PALETTE.dark, PALETTE.light, PALETTE.darkest];
 
 /* ---------------------------------------------------------------------
-   DATA LAYER: tunable difficulty constants — edit these, not the logic
+   DATA LAYER: Vibe Index constants.
 --------------------------------------------------------------------- */
-const HAZARD_BASE_DAMAGE = 35;   // % risk added by a hazard hit on Level 1
-const HAZARD_DAMAGE_STEP = 5;    // % extra damage added per level index beyond 1
-const RISK_REDUCTION_ON_PASS = 20; // % risk removed for passing a level's quiz
-const RISK_MAX = 100;
+const VIBE_START = 50; // starting vibeIndex value
+const VIBE_MIN = 0;    // game-over threshold (vibeIndex <= this)
+const VIBE_MAX = 100;
+
+// Hazard penalty and quiz reward both scale with the level currently being
+// played (5 per level, capped at level 10 = 50) instead of a flat amount.
+function getVibeAmount(currentLevelNumber) {
+  const STEP = 5;
+  const CAP_LEVEL = 10;
+  const effectiveLevel = Math.min(currentLevelNumber, CAP_LEVEL);
+  return STEP * effectiveLevel;
+}
 
 /* ---------------------------------------------------------------------
    DATA LAYER: all 20 country levels in fixed rotation order.
@@ -401,7 +421,7 @@ const ENCOUNTER_PATTERNS = [
    ===================================================================== */
 
 // ---- Persistent run state (never resets on level transition, only on restart) ----
-let riskMeter = 0;
+let vibeIndex = VIBE_START;
 let stamps = 0;
 let levelIndex = 1; // absolute level count across the whole run (keeps climbing past 20)
 let currentLevel = LEVELS[(levelIndex - 1) % LEVELS.length];
@@ -411,8 +431,8 @@ let player = { x: PLAYER_START.x, y: PLAYER_START.y };
 // Which content key (clue1/clue2/hazard1/hazard2) currently backs each physical slot
 let slotAssignment = {};
 
-// ---- Finite state machine: 'playing' | 'dialog' | 'quiz' | 'gameover' ----
-let gameState = 'playing';
+// ---- Finite state machine: 'title' | 'playing' | 'dialog' | 'quiz' | 'gameover' ----
+let gameState = 'title';
 
 // Queued action to run once the current dialog box is dismissed (e.g. open quiz)
 let pendingAfterDialog = null;
@@ -425,9 +445,12 @@ const ctx = canvas.getContext('2d');
 const flashOverlay = document.getElementById('flashOverlay');
 
 const hudCountry = document.getElementById('hudCountry');
-const hudRisk = document.getElementById('hudRisk');
+const hudVibe = document.getElementById('hudVibe');
 const hudStamps = document.getElementById('hudStamps');
 const hudLevel = document.getElementById('hudLevel');
+
+const titleScreen = document.getElementById('titleScreen');
+const startBtn = document.getElementById('startBtn');
 
 const dialogBox = document.getElementById('dialogBox');
 const dialogText = document.getElementById('dialogText');
@@ -443,18 +466,9 @@ const gameOverModal = document.getElementById('gameOverModal');
 const gameOverStats = document.getElementById('gameOverStats');
 const restartBtn = document.getElementById('restartBtn');
 
-/* ---------------------------------------------------------------------
-   Damage formula: base 35% on Level 1, +5% per level index thereafter.
-   Uses the ABSOLUTE level index (keeps scaling after the 20-country
-   rotation loops back around), not the looped country slot.
---------------------------------------------------------------------- */
-function currentHazardDamage() {
-  return HAZARD_BASE_DAMAGE + HAZARD_DAMAGE_STEP * (levelIndex - 1);
-}
-
 function updateHUD() {
   hudCountry.textContent = `Country: ${currentLevel.country}`;
-  hudRisk.textContent = `Risk: ${Math.round(riskMeter)}%`;
+  hudVibe.textContent = `VIBE:${Math.round(vibeIndex)}`;
   hudStamps.textContent = `Stamps: ${stamps}`;
   hudLevel.textContent = `Level: ${levelIndex}`;
 }
@@ -503,12 +517,12 @@ function flashRed() {
 }
 
 function triggerHazard() {
-  const dmg = currentHazardDamage();
-  riskMeter = Math.min(RISK_MAX, riskMeter + dmg);
+  const amount = getVibeAmount(levelIndex);
+  vibeIndex = Math.max(VIBE_MIN, vibeIndex - amount);
   flashRed();
   updateHUD();
-  const message = `That "local" was actually a scammer! The misstep costs you ${dmg}% Risk.`;
-  if (riskMeter >= RISK_MAX) {
+  const message = `That "local" was actually a scammer! -${amount} Vibe.`;
+  if (vibeIndex <= VIBE_MIN) {
     showDialog(message, () => triggerGameOver());
   } else {
     showDialog(message);
@@ -522,7 +536,7 @@ function triggerGameOver() {
 }
 
 function restartGame() {
-  riskMeter = 0;
+  vibeIndex = VIBE_START;
   stamps = 0;
   loadLevel(1);
   gameOverModal.classList.add('hidden');
@@ -569,14 +583,17 @@ function finishQuiz() {
   const passed = quizCorrectCount === currentLevel.quiz.length;
   if (passed) {
     stamps++;
-    riskMeter = Math.max(0, riskMeter - RISK_REDUCTION_ON_PASS);
+    // Compute using the level just being completed, before it increments.
+    const amount = getVibeAmount(levelIndex);
+    vibeIndex = Math.min(VIBE_MAX, vibeIndex + amount);
     updateHUD();
     const clearedCountry = currentLevel.country;
     const nextIdx = levelIndex + 1;
-    showDialog(`Passport stamped for ${clearedCountry}! Risk -${RISK_REDUCTION_ON_PASS}%. Welcome to your next destination.`, () => {
+    showDialog(`Passport stamped for ${clearedCountry}! +${amount} Vibe. Welcome to your next destination.`, () => {
       loadLevel(nextIdx);
     });
   } else {
+    // Failing a quiz never reduces vibeIndex — it simply withholds the bonus.
     showDialog(`Quiz failed! The officer sends you back to review the clues and try again.`);
   }
 }
@@ -584,6 +601,11 @@ function finishQuiz() {
 quizOptionA.addEventListener('click', () => answerQuiz(0));
 quizOptionB.addEventListener('click', () => answerQuiz(1));
 restartBtn.addEventListener('click', restartGame);
+
+startBtn.addEventListener('click', () => {
+  titleScreen.classList.add('hidden');
+  gameState = 'playing';
+});
 
 /* ---------------------------------------------------------------------
    Input handling
@@ -619,7 +641,8 @@ function handleInteract() {
   }
 
   // Disguised encounter slots: every slot looks identical, so the only way
-  // to learn whether it's a helpful clue or a harmful hazard is to engage.
+  // to learn whether it's a helpful clue or a harmful hazard is to engage
+  // with it (Space/Z) — nothing is revealed just by walking onto it.
   for (const slotKey of SLOT_KEYS) {
     if (rectsOverlap(pRect, LAYOUT[slotKey])) {
       const contentKey = slotAssignment[slotKey];
