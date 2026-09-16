@@ -8,58 +8,46 @@
 <title>Passport Panic</title>
 <style>
   /* ===================== CLIENT / UI LAYER (styling) =====================
-     Visual pass only — two coordinated palettes:
-     - UI palette (chrome: HUD, dialogue, modals, buttons)
-     - Scene palette (used by the canvas art; see SCENE_PALETTE in the script)
-     No hex values outside these two palettes are used anywhere below.
+     Every screen EXCEPT the game map (the canvas — see SCENE_PALETTE in the
+     script, left untouched) now uses just two colors, consistently:
+     --ui-light (light purple) for backgrounds, --ui-darkest (dark purple)
+     for text and outlines. Interactive "active" states (hover, selected,
+     pressed) invert the pairing rather than introducing a third shade.
   ========================================================================= */
   :root {
-    --ui-darkest: #241242;
-    --ui-dark:    #4B2380;
-    --ui-mid:     #9163D6;
-    --ui-light:   #D9C7F5;
-    /* a couple of scene-palette values reused for the light-mode variant */
-    --scene-wall:      #F5E9C9;
-    --scene-wall-shade:#E7D6A8;
-    --scene-wood-dark: #6E4520;
+    --ui-light:   #D9C7F5; /* light purple — background */
+    --ui-darkest: #241242; /* dark purple — text & outlines */
   }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0; min-height: 100%;
-    background: var(--ui-darkest);
+    background: var(--ui-light);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    color: var(--ui-light);
+    color: var(--ui-darkest);
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 12px 0;
   }
-  /* Respect a light-mode environment without leaving the two palettes */
-  @media (prefers-color-scheme: light) {
-    html, body { background: var(--scene-wall); color: var(--ui-darkest); }
-    #app { background: var(--scene-wall-shade); border-color: var(--ui-dark); }
-    #hud, #dialogBox, .modalBox { background: var(--ui-light); color: var(--ui-darkest); border-color: var(--ui-dark); }
-    #hud span, #dialogBox .hint, #controlsHint { color: var(--ui-darkest); }
-  }
   #app {
     width: 480px;
     max-width: 96vw;
-    border: 6px solid var(--ui-mid);
+    border: 6px solid var(--ui-darkest);
     border-radius: 16px;
-    background: var(--ui-darkest);
-    box-shadow: 0 0 0 4px var(--ui-darkest), 0 10px 24px rgba(0,0,0,0.45);
+    background: var(--ui-light);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.35);
     padding: 10px;
   }
   #hud {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    background: var(--ui-dark);
-    color: var(--ui-light);
+    background: var(--ui-light);
+    color: var(--ui-darkest);
     padding: 7px 10px;
     font-size: 13px;
     font-weight: bold;
-    border: 2px solid var(--ui-mid);
+    border: 2px solid var(--ui-darkest);
     border-radius: 10px;
     letter-spacing: 0.5px;
   }
@@ -67,7 +55,7 @@
   #canvasWrap {
     position: relative;
     margin-top: 8px;
-    border: 3px solid var(--ui-mid);
+    border: 3px solid var(--ui-darkest);
     border-radius: 12px;
     overflow: hidden;
   }
@@ -79,7 +67,7 @@
   #flashOverlay {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: #C0392B; /* scene "roof tile" red — used only as a transient alert flash */
+    background: #C0392B; /* scene "roof tile" red — used only as a transient alert flash on the map */
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.08s linear;
@@ -89,13 +77,13 @@
   #dialogBox {
     margin-top: 8px;
     min-height: 54px;
-    background: var(--ui-dark);
-    border: 3px solid var(--ui-mid);
+    background: var(--ui-light);
+    border: 3px solid var(--ui-darkest);
     border-radius: 10px;
     padding: 10px 12px;
     font-size: 13px;
     line-height: 1.4;
-    color: var(--ui-light);
+    color: var(--ui-darkest);
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
@@ -114,7 +102,7 @@
     margin-top: 6px;
     font-size: 11px;
     text-align: center;
-    color: var(--ui-light);
+    color: var(--ui-darkest);
     opacity: 0.75;
   }
 
@@ -134,15 +122,15 @@
   #dpad button, #interactBtn {
     font-family: inherit;
     font-weight: bold;
-    background: var(--ui-dark);
-    color: var(--ui-light);
-    border: 2px solid var(--ui-mid);
+    background: var(--ui-light);
+    color: var(--ui-darkest);
+    border: 2px solid var(--ui-darkest);
     border-radius: 8px;
     cursor: pointer;
     touch-action: none;
     user-select: none;
   }
-  #dpad button:active, #interactBtn:active { background: var(--ui-light); color: var(--ui-darkest); }
+  #dpad button:active, #interactBtn:active { background: var(--ui-darkest); color: var(--ui-light); }
   #dpadUp    { grid-column: 2; grid-row: 1; }
   #dpadLeft  { grid-column: 1; grid-row: 2; }
   #dpadRight { grid-column: 3; grid-row: 2; }
@@ -158,7 +146,7 @@
   .modalOverlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(36, 18, 66, 0.85); /* var(--ui-darkest) with alpha */
+    background: rgba(217, 199, 245, 0.85); /* var(--ui-light) with alpha */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -169,8 +157,8 @@
   .modalBox {
     width: 380px;
     max-width: 92vw;
-    background: var(--ui-dark);
-    border: 4px solid var(--ui-mid);
+    background: var(--ui-light);
+    border: 4px solid var(--ui-darkest);
     border-radius: 14px;
     padding: 18px;
     text-align: center;
@@ -179,17 +167,17 @@
   }
   .modalBox h2 {
     margin: 0 0 10px 0;
-    color: var(--ui-light);
     font-size: 18px;
   }
   .modalBox p { font-size: 13px; margin: 8px 0 14px 0; }
   .rulesList { text-align: left; margin: 10px 0; padding: 0 4px; }
   .rulesList p { margin: 6px 0; font-size: 12.5px; }
-  .rulesList .arrow { color: var(--ui-light); margin-right: 4px; }
+  .rulesList .arrow { margin-right: 4px; }
   .configBox, .controlsBox {
     text-align: left;
-    background: var(--ui-darkest);
-    border: 2px solid var(--ui-mid);
+    background: var(--ui-light);
+    color: var(--ui-darkest);
+    border: 2px solid var(--ui-darkest);
     border-radius: 8px;
     padding: 8px 10px;
     margin: 10px 0;
@@ -200,9 +188,9 @@
     width: 100%;
     font-family: inherit;
     font-size: 12px;
-    background: var(--ui-dark);
-    color: var(--ui-light);
-    border: 2px solid var(--ui-mid);
+    background: var(--ui-light);
+    color: var(--ui-darkest);
+    border: 2px solid var(--ui-darkest);
     border-radius: 6px;
     padding: 5px;
   }
@@ -213,18 +201,17 @@
     padding: 10px;
     font-family: inherit;
     font-size: 13px;
-    background: var(--ui-darkest);
-    color: var(--ui-light);
-    border: 2px solid var(--ui-mid);
+    background: var(--ui-light);
+    color: var(--ui-darkest);
+    border: 2px solid var(--ui-darkest);
     border-radius: 8px;
     cursor: pointer;
   }
-  /* ui-mid fails WCAG AA (4.5:1) as a normal-text background against either
-     ui-light or ui-darkest text (~4:1 both ways) — reserved for borders/
-     accents instead. Interactive states use ui-light/ui-darkest, which
-     pairs at 10.84:1. */
-  .quizOption:hover { background: var(--ui-light); color: var(--ui-darkest); }
-  .quizOption.correct { background: var(--ui-light); color: var(--ui-darkest); }
+  /* Hover/correct invert the light-bg/dark-text pairing so the resting
+     state (light bg, dark text) and the "active" states stay visually
+     distinct without introducing a third color. */
+  .quizOption:hover { background: var(--ui-darkest); color: var(--ui-light); }
+  .quizOption.correct { background: var(--ui-darkest); color: var(--ui-light); }
   .quizOption.wrong { opacity: 0.45; } /* locked/inactive control — exempt from text-contrast rules */
   .quizOption.locked { pointer-events: none; }
   .quizProgress { font-size: 11px; opacity: 0.8; margin-bottom: 6px; }
@@ -243,7 +230,7 @@
     cursor: pointer;
     font-weight: bold;
   }
-  #restartBtn:hover, #startBtn:hover, #quizContinueBtn:hover { background: var(--ui-dark); color: var(--ui-light); }
+  #restartBtn:hover, #startBtn:hover, #quizContinueBtn:hover { background: var(--ui-darkest); color: var(--ui-light); }
 
   /* ---- Responsive: single centered column, touch controls, below ~580px ---- */
   @media (max-width: 580px), (pointer: coarse) {
@@ -370,9 +357,12 @@
 
 /* ---------------------------------------------------------------------
    DATA LAYER: two coordinated palettes (visual pass — NEVER add colors
-   outside these). UI_PALETTE matches the CSS custom properties and is
-   used for chrome-ish canvas elements (the passport page/ink). SCENE_PALETTE
-   is the cottage-core village art (map tiles, buildings, characters).
+   outside these), used only for the game map (canvas). The DOM screens
+   (HUD/dialog/modals/buttons) are styled separately in <style>, and now
+   use just --ui-light/--ui-darkest consistently — not this JS object.
+   UI_PALETTE here is used for chrome-ish canvas elements (the accent
+   rotation, the officer's jacket). SCENE_PALETTE is the cottage-core
+   village art (map tiles, buildings, characters).
 --------------------------------------------------------------------- */
 const UI_PALETTE = {
   darkest: '#241242',
@@ -1454,6 +1444,27 @@ function drawRoundedRect(x, y, w, h, r) {
   ctx.closePath();
 }
 
+// In-world text label on a small cream plaque. woodDark text directly on
+// the dirt path only measures ~3.2:1 contrast (fails WCAG AA's 4.5:1 for
+// normal text); backing it with a wall-colored plaque restores the same
+// ~6.9:1 contrast the passport stamp already relies on, everywhere labels
+// appear on the map (CUSTOMS sign, landmark name).
+function drawTextLabel(text, cx, y) {
+  ctx.font = "bold 12px 'Segoe UI', Arial, sans-serif";
+  ctx.textAlign = 'center';
+  const padX = 8;
+  const w = ctx.measureText(text).width + padX * 2;
+  const h = 20;
+  ctx.fillStyle = SCENE_PALETTE.wall;
+  ctx.strokeStyle = SCENE_PALETTE.woodDark;
+  ctx.lineWidth = 1.5;
+  drawRoundedRect(cx - w / 2, y - h + 5, w, h, 5);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.fillText(text, cx, y);
+}
+
 // Fixed stone-fleck positions across the whole world, computed once at
 // load so they stay put frame to frame instead of flickering.
 const PATH_SPECKLES = Array.from({ length: 260 }, () => ({
@@ -1730,10 +1741,7 @@ function drawWorldLandmark(type, country) {
   drawStampIcon(type);
   ctx.restore();
 
-  ctx.fillStyle = SCENE_PALETTE.woodDark;
-  ctx.font = "bold 13px 'Segoe UI', Arial, sans-serif";
-  ctx.textAlign = 'center';
-  ctx.fillText(country.toUpperCase(), pos.x, pos.y + 145);
+  drawTextLabel(country.toUpperCase(), pos.x, pos.y + 145);
 }
 
 // Soft drop-shadow ellipse shared by both characters.
@@ -2181,10 +2189,7 @@ function render() {
     24,
     currentLevel.accent
   );
-  ctx.fillStyle = SCENE_PALETTE.woodDark;
-  ctx.font = "bold 11px 'Segoe UI', Arial, sans-serif";
-  ctx.textAlign = 'center';
-  ctx.fillText('CUSTOMS', LAYOUT.officer.x + LAYOUT.officer.w / 2, LAYOUT.officer.y + LAYOUT.officer.h + 30);
+  drawTextLabel('CUSTOMS', LAYOUT.officer.x + LAYOUT.officer.w / 2, LAYOUT.officer.y + LAYOUT.officer.h + 30);
 
   // Player
   drawPlayerCharacter(player.x, player.y, PLAYER_SIZE);
