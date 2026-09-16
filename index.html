@@ -7,115 +7,205 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Passport Panic</title>
 <style>
-  /* ===================== CLIENT / UI LAYER (styling) ===================== */
+  /* ===================== CLIENT / UI LAYER (styling) =====================
+     Visual pass only — two coordinated palettes:
+     - UI palette (chrome: HUD, dialogue, modals, buttons)
+     - Scene palette (used by the canvas art; see SCENE_PALETTE in the script)
+     No hex values outside these two palettes are used anywhere below.
+  ========================================================================= */
+  :root {
+    --ui-darkest: #241242;
+    --ui-dark:    #4B2380;
+    --ui-mid:     #9163D6;
+    --ui-light:   #D9C7F5;
+    /* a couple of scene-palette values reused for the light-mode variant */
+    --scene-wall:      #F5E9C9;
+    --scene-wall-shade:#E7D6A8;
+    --scene-wood-dark: #6E4520;
+  }
   * { box-sizing: border-box; }
   html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: #0f380f;
-    font-family: 'Courier New', Courier, monospace;
-    color: #9bbc0f;
+    margin: 0; padding: 0; min-height: 100%;
+    background: var(--ui-darkest);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ui-light);
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 12px 0;
+  }
+  /* Respect a light-mode environment without leaving the two palettes */
+  @media (prefers-color-scheme: light) {
+    html, body { background: var(--scene-wall); color: var(--ui-darkest); }
+    #app { background: var(--scene-wall-shade); border-color: var(--ui-dark); }
+    #hud, #dialogBox, .modalBox { background: var(--ui-light); color: var(--ui-darkest); border-color: var(--ui-dark); }
+    #hud span, #dialogBox .hint, #controlsHint { color: var(--ui-darkest); }
   }
   #app {
     width: 480px;
-    border: 6px solid #306230;
-    border-radius: 10px;
-    background: #0f380f;
-    box-shadow: 0 0 0 4px #0f380f, 0 0 20px rgba(0,0,0,0.6);
-    padding: 8px;
+    max-width: 96vw;
+    border: 6px solid var(--ui-mid);
+    border-radius: 16px;
+    background: var(--ui-darkest);
+    box-shadow: 0 0 0 4px var(--ui-darkest), 0 10px 24px rgba(0,0,0,0.45);
+    padding: 10px;
   }
   #hud {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    background: #306230;
-    color: #9bbc0f;
-    padding: 6px 8px;
+    background: var(--ui-dark);
+    color: var(--ui-light);
+    padding: 7px 10px;
     font-size: 13px;
     font-weight: bold;
-    border: 2px solid #0f380f;
-    border-radius: 4px;
+    border: 2px solid var(--ui-mid);
+    border-radius: 10px;
     letter-spacing: 0.5px;
   }
   #hud span { margin-right: 8px; }
   #canvasWrap {
     position: relative;
-    margin-top: 6px;
-    border: 3px solid #306230;
-    border-radius: 4px;
+    margin-top: 8px;
+    border: 3px solid var(--ui-mid);
+    border-radius: 12px;
     overflow: hidden;
   }
   canvas {
     display: block;
-    background: #8bac0f;
-    image-rendering: pixelated;
     width: 100%;
     height: auto;
   }
   #flashOverlay {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: #ff0000;
+    background: #C0392B; /* scene "roof tile" red — used only as a transient alert flash */
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.08s linear;
   }
-  #flashOverlay.active { opacity: 0.45; }
+  #flashOverlay.active { opacity: 0.4; }
 
   #dialogBox {
-    margin-top: 6px;
+    margin-top: 8px;
     min-height: 54px;
-    background: #0f380f;
-    border: 3px solid #9bbc0f;
-    border-radius: 4px;
-    padding: 8px 10px;
+    background: var(--ui-dark);
+    border: 3px solid var(--ui-mid);
+    border-radius: 10px;
+    padding: 10px 12px;
     font-size: 13px;
     line-height: 1.4;
-    color: #9bbc0f;
+    color: var(--ui-light);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
   }
   #dialogBox.hidden { display: none; }
   #dialogBox .hint {
-    display: block;
-    margin-top: 6px;
+    flex: 0 0 auto;
     font-size: 11px;
-    opacity: 0.7;
+    opacity: 0.75;
+    white-space: nowrap;
+    text-align: right;
   }
 
   #controlsHint {
     margin-top: 6px;
     font-size: 11px;
     text-align: center;
-    color: #8bac0f;
+    color: var(--ui-light);
+    opacity: 0.75;
   }
 
-  /* ---- Modal overlays (quiz / game over) ---- */
+  /* ---- Touch controls (D-pad + interact), shown on narrow/touch screens ---- */
+  #touchControls {
+    display: none;
+    margin-top: 10px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 40px);
+    grid-template-rows: repeat(3, 40px);
+    gap: 4px;
+  }
+  #dpad button, #interactBtn {
+    font-family: inherit;
+    font-weight: bold;
+    background: var(--ui-dark);
+    color: var(--ui-light);
+    border: 2px solid var(--ui-mid);
+    border-radius: 8px;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+  }
+  #dpad button:active, #interactBtn:active { background: var(--ui-light); color: var(--ui-darkest); }
+  #dpadUp    { grid-column: 2; grid-row: 1; }
+  #dpadLeft  { grid-column: 1; grid-row: 2; }
+  #dpadRight { grid-column: 3; grid-row: 2; }
+  #dpadDown  { grid-column: 2; grid-row: 3; }
+  #interactBtn {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    font-size: 12px;
+  }
+
+  /* ---- Modal overlays (title / quiz / hazard / game over) ---- */
   .modalOverlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(15, 56, 15, 0.85);
+    background: rgba(36, 18, 66, 0.85); /* var(--ui-darkest) with alpha */
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 50;
+    padding: 16px;
   }
   .modalOverlay.hidden { display: none; }
   .modalBox {
     width: 380px;
-    max-width: 90vw;
-    background: #0f380f;
-    border: 4px solid #9bbc0f;
-    border-radius: 8px;
+    max-width: 92vw;
+    background: var(--ui-dark);
+    border: 4px solid var(--ui-mid);
+    border-radius: 14px;
     padding: 18px;
     text-align: center;
+    max-height: 90vh;
+    overflow-y: auto;
   }
   .modalBox h2 {
     margin: 0 0 10px 0;
-    color: #9bbc0f;
+    color: var(--ui-light);
     font-size: 18px;
   }
   .modalBox p { font-size: 13px; margin: 8px 0 14px 0; }
+  .rulesList { text-align: left; margin: 10px 0; padding: 0 4px; }
+  .rulesList p { margin: 6px 0; font-size: 12.5px; }
+  .rulesList .arrow { color: var(--ui-light); margin-right: 4px; }
+  .configBox, .controlsBox {
+    text-align: left;
+    background: var(--ui-darkest);
+    border: 2px solid var(--ui-mid);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 10px 0;
+    font-size: 11.5px;
+  }
+  .configBox label { display: block; margin-bottom: 4px; opacity: 0.85; }
+  .configBox select {
+    width: 100%;
+    font-family: inherit;
+    font-size: 12px;
+    background: var(--ui-dark);
+    color: var(--ui-light);
+    border: 2px solid var(--ui-mid);
+    border-radius: 6px;
+    padding: 5px;
+  }
   .quizOption {
     display: block;
     width: 100%;
@@ -123,28 +213,48 @@
     padding: 10px;
     font-family: inherit;
     font-size: 13px;
-    background: #306230;
-    color: #9bbc0f;
-    border: 2px solid #9bbc0f;
-    border-radius: 4px;
+    background: var(--ui-darkest);
+    color: var(--ui-light);
+    border: 2px solid var(--ui-mid);
+    border-radius: 8px;
     cursor: pointer;
   }
-  .quizOption:hover { background: #8bac0f; color: #0f380f; }
+  /* ui-mid fails WCAG AA (4.5:1) as a normal-text background against either
+     ui-light or ui-darkest text (~4:1 both ways) — reserved for borders/
+     accents instead. Interactive states use ui-light/ui-darkest, which
+     pairs at 10.84:1. */
+  .quizOption:hover { background: var(--ui-light); color: var(--ui-darkest); }
+  .quizOption.correct { background: var(--ui-light); color: var(--ui-darkest); }
+  .quizOption.wrong { opacity: 0.45; } /* locked/inactive control — exempt from text-contrast rules */
+  .quizOption.locked { pointer-events: none; }
   .quizProgress { font-size: 11px; opacity: 0.8; margin-bottom: 6px; }
+  #quizFeedback.hidden { display: none; }
+  #quizFeedbackText { font-size: 13px; font-weight: bold; margin: 10px 0; }
 
-   #restartBtn, #startBtn {
+  #restartBtn, #startBtn, #quizContinueBtn {
     margin-top: 10px;
-    padding: 10px 20px;
+    padding: 11px 22px;
     font-family: inherit;
     font-size: 14px;
-    background: #8bac0f;
-    color: #0f380f;
-    border: 2px solid #0f380f;
-    border-radius: 4px;
+    background: var(--ui-light);
+    color: var(--ui-darkest);
+    border: 2px solid var(--ui-darkest);
+    border-radius: 999px;
     cursor: pointer;
     font-weight: bold;
   }
-  #restartBtn:hover, #startBtn:hover { background: #9bbc0f; }
+  #restartBtn:hover, #startBtn:hover, #quizContinueBtn:hover { background: var(--ui-dark); color: var(--ui-light); }
+
+  /* ---- Responsive: single centered column, touch controls, below ~580px ---- */
+  @media (max-width: 580px), (pointer: coarse) {
+    #touchControls { display: flex; }
+  }
+  @media (max-width: 580px) {
+    body { padding: 6px 0; }
+    #app { border-radius: 10px; padding: 8px; }
+    #hud { font-size: 11px; }
+    .modalBox { padding: 14px; }
+  }
 </style>
 </head>
 <body>
@@ -173,16 +283,37 @@
   </div>
 
   <div id="controlsHint">Move: WASD / Arrow Keys &nbsp;|&nbsp; Interact: Space / Z</div>
+
+  <!-- Touch controls: mirror the keyboard, shown on narrow/touch screens (see CSS) -->
+  <div id="touchControls">
+    <div id="dpad">
+      <button id="dpadUp" aria-label="Move up">▲</button>
+      <button id="dpadLeft" aria-label="Move left">◀</button>
+      <button id="dpadRight" aria-label="Move right">▶</button>
+      <button id="dpadDown" aria-label="Move down">▼</button>
+    </div>
+    <button id="interactBtn" aria-label="Interact">SPACE / Z</button>
+  </div>
 </div>
 
 <!-- ===================== CLIENT / UI: Title Screen ===================== -->
 <div id="titleScreen" class="modalOverlay">
   <div class="modalBox">
     <h2>Passport Panic</h2>
-    <p>1. Collect clues [?] to learn customs.</p>
-    <p>2. Avoid traps [!] - costs rise per level.</p>
-    <p>3. Pass Quizzes: Vibe reward rises too.</p>
-    <p>4. Vibe hits 0 = DEPORTED!</p>
+    <div class="rulesList">
+      <p><span class="arrow">▸</span>Wander the city to find clues and street situations.</p>
+      <p><span class="arrow">▸</span>Wrong calls cost Vibe — costs rise per level.</p>
+      <p><span class="arrow">▸</span>Reach the landmark & bench to take the Customs Quiz.</p>
+      <p><span class="arrow">▸</span>Vibe hits 0 = DEPORTED!</p>
+    </div>
+    <div class="controlsBox">
+      Move: WASD / Arrow Keys<br>
+      Interact: Space / Z (or on-screen buttons)
+    </div>
+    <div class="configBox">
+      <label for="startCountrySelect">Choose your first country:</label>
+      <select id="startCountrySelect"></select>
+    </div>
     <button id="startBtn">Start Journey</button>
   </div>
 </div>
@@ -190,11 +321,27 @@
 <!-- ===================== CLIENT / UI: Quiz Modal ===================== -->
 <div id="quizModal" class="modalOverlay hidden">
   <div class="modalBox">
-    <div class="quizProgress" id="quizProgress">Question 1 of 2</div>
+    <div class="quizProgress" id="quizProgress">Question 1 of 3</div>
     <h2 id="quizCountryName">Customs Check</h2>
     <p id="quizQuestion"></p>
-    <button class="quizOption" id="quizOptionA"></button>
-    <button class="quizOption" id="quizOptionB"></button>
+    <div id="quizOptionGroup">
+      <button class="quizOption" id="quizOptionA"></button>
+      <button class="quizOption" id="quizOptionB"></button>
+    </div>
+    <div id="quizFeedback" class="hidden">
+      <p id="quizFeedbackText"></p>
+      <button id="quizContinueBtn">Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== CLIENT / UI: Hazard Choice Modal ===================== -->
+<div id="hazardModal" class="modalOverlay hidden">
+  <div class="modalBox">
+    <h2>Street Situation</h2>
+    <p id="hazardScenario"></p>
+    <button class="quizOption" id="hazardOptionA"></button>
+    <button class="quizOption" id="hazardOptionB"></button>
   </div>
 </div>
 
@@ -222,17 +369,33 @@
    ===================================================================== */
 
 /* ---------------------------------------------------------------------
-   DATA LAYER: fixed GB 4-color palette (NEVER add new colors — only
-   reassign which shade is used as a level's "accent")
+   DATA LAYER: two coordinated palettes (visual pass — NEVER add colors
+   outside these). UI_PALETTE matches the CSS custom properties and is
+   used for chrome-ish canvas elements (the passport page/ink). SCENE_PALETTE
+   is the cottage-core village art (map tiles, buildings, characters).
 --------------------------------------------------------------------- */
-const PALETTE = {
-  darkest:  '#0f380f',
-  dark:     '#306230',
-  light:    '#8bac0f',
-  lightest: '#9bbc0f'
+const UI_PALETTE = {
+  darkest: '#241242',
+  dark:    '#4B2380',
+  mid:     '#9163D6',
+  light:   '#D9C7F5'
 };
-// Accent rotation pool used by LEVELS (index % 4)
-const ACCENT_POOL = [PALETTE.lightest, PALETTE.dark, PALETTE.light, PALETTE.darkest];
+const SCENE_PALETTE = {
+  grass: '#7CB342', grassShade: '#69A331', grassDeepShade: '#5E9A2E',
+  dirt: '#C79A5B', dirtDark: '#B08347', dirtEdge: '#9C7239',
+  wall: '#F5E9C9', wallShade: '#E7D6A8',
+  woodTrim: '#8B5A2B', woodDark: '#6E4520',
+  roofTile: '#C0392B', roofTileDark: '#A5301F',
+  roofThatch: '#D9A85C', roofThatchDark: '#B98A46',
+  leaves: '#5A9A3C', leavesDark: '#3F7A28',
+  stone: '#B9B0A2', stoneDark: '#8F877A',
+  skin: '#F2C29A'
+};
+// Accent rotation pool used by LEVELS (index % 4) — tints one distinctive
+// element per level (customs-house flag, officer's cap) so returning
+// players can tell levels apart at a glance. Sourced only from the two
+// palettes above; same rotation-by-index mechanism as before, just reskinned.
+const ACCENT_POOL = [UI_PALETTE.mid, SCENE_PALETTE.roofTile, UI_PALETTE.dark, SCENE_PALETTE.roofThatch];
 
 /* ---------------------------------------------------------------------
    DATA LAYER: Vibe Index constants.
@@ -240,6 +403,9 @@ const ACCENT_POOL = [PALETTE.lightest, PALETTE.dark, PALETTE.light, PALETTE.dark
 const VIBE_START = 50; // starting vibeIndex value
 const VIBE_MIN = 0;    // game-over threshold (vibeIndex <= this)
 const VIBE_MAX = 100;
+
+// Each Customs Quiz has 3 questions; this many correct answers passes it.
+const QUIZ_PASS_THRESHOLD = 2;
 
 // Hazard penalty and quiz reward both scale with the level currently being
 // played (5 per level, capped at level 10 = 50) instead of a flat amount.
@@ -257,17 +423,23 @@ const STAMP_IN_MS = 220;   // stamp pops in
 const STAMP_HOLD_MS = 650; // stamp holds fully visible
 const STAMP_OUT_MS = 230;  // stamp fades/clears from the screen
 const STAMP_TOTAL_MS = STAMP_IN_MS + STAMP_HOLD_MS + STAMP_OUT_MS;
-const PLANE_MS = 1000;     // airplane flies across the screen
+const PLANE_MS = 2000;     // airplane flies across the screen (50% slower than before)
 const TRANSITION_TOTAL_MS = STAMP_TOTAL_MS + PLANE_MS;
 
 /* ---------------------------------------------------------------------
    DATA LAYER: all 20 country levels in fixed rotation order.
    Levels 1-5 are fully authored with real cultural facts + quizzes.
    Levels 6-20 are placeholders (same structure/behavior, swap-in-ready).
-   `landmark` picks a simple background silhouette drawn in drawLandmark()
-   below, using only PALETTE colors, to give each map its country "vibe".
-   `hazard1`/`hazard2` are the country-specific cultural-misstep flavor
-   text shown when a disguised hazard slot is engaged (see triggerHazard()).
+   `landmark` picks which country-shaped glyph drawStampIcon() draws inside
+   the passport stamp during the level transition (see drawStampAnimation()).
+   `hazard1`/`hazard2` are binary-choice "street situation" encounters shown
+   when a disguised hazard slot is engaged (see openHazardChoice()): picking
+   the wrong option costs Vibe, picking the right one costs nothing.
+   Each hazard: { scenario, options: [a,b], correct, correctText, wrongText }
+   `clue1` is a customs-quiz-related hint (its info directly answers one of
+   the 3 quiz questions); `clue2` is a general fun fact about the country
+   that is NOT tied to any quiz question — pure trivia flavor.
+   `quiz` holds 3 questions; passing requires QUIZ_PASS_THRESHOLD (2) correct.
    Each level: { country, accent, landmark, clue1, clue2, hazard1, hazard2, quiz: [ {q, options:[a,b], correct}, ... ] }
 --------------------------------------------------------------------- */
 const LEVELS = [
@@ -277,12 +449,25 @@ const LEVELS = [
     accent: ACCENT_POOL[0 % 4],
     landmark: "toriiGate",
     clue1: "In Japan, it's customary to remove your shoes before entering someone's home.",
-    clue2: "Bowing is a traditional greeting in Japan, often used in place of handshakes in formal situations.",
-    hazard1: "You left a tip on the table for the waiter — an awkward moment, since tipping isn't customary in Japan and can even cause confusion.",
-    hazard2: "You pointed at the menu with your chopsticks — a small habit that many in Japan consider quite rude at the table.",
+    clue2: "Japan has more vending machines per capita than almost any other country, with over 5 million scattered across the country.",
+    hazard1: {
+      scenario: "Your waiter brings the bill. Do you leave a cash tip on the table?",
+      options: ["Yes, leave a tip", "No, just pay the bill"],
+      correct: 1,
+      correctText: "Good call — tipping isn't customary in Japan and can even confuse the staff.",
+      wrongText: "The waiter chases you down with your 'forgotten' change — tipping isn't done here."
+    },
+    hazard2: {
+      scenario: "You want to point out a dish on the menu. Do you point at it with your chopsticks?",
+      options: ["Yes, point with chopsticks", "No, point with your hand"],
+      correct: 1,
+      correctText: "Smart — pointing with chopsticks is considered rude in Japan, so your hand works better.",
+      wrongText: "A few nearby diners notice — pointing with chopsticks is seen as impolite in Japan."
+    },
     quiz: [
       { q: "Before entering a home in Japan, what should you do?", options: ["Remove your shoes", "Keep your shoes on"], correct: 0 },
-      { q: "What is a traditional greeting in Japan?", options: ["A big hug", "A bow"], correct: 1 }
+      { q: "What is a traditional greeting in Japan?", options: ["A big hug", "A bow"], correct: 1 },
+      { q: "In Japan, loudly slurping your noodles is generally seen as:", options: ["A compliment to the chef", "Rude table manners"], correct: 0 }
     ]
   },
   // 2 - FRANCE (built)
@@ -291,12 +476,25 @@ const LEVELS = [
     accent: ACCENT_POOL[1 % 4],
     landmark: "eiffelTower",
     clue1: "In France, it's polite to greet shopkeepers with 'Bonjour' before starting any conversation.",
-    clue2: "Bread such as a baguette is traditionally placed directly on the table, not on a separate plate.",
-    hazard1: "You launched straight into English without a greeting — the shopkeeper's mood visibly cools.",
-    hazard2: "You showed up to a dinner party empty-handed — your host was clearly expecting a small gift.",
+    clue2: "France is the world's most visited country, welcoming over 100 million international tourists every year.",
+    hazard1: {
+      scenario: "You walk into a small Parisian shop. Do you start browsing right away without greeting the shopkeeper?",
+      options: ["Yes, just browse", "No, say 'Bonjour' first"],
+      correct: 1,
+      correctText: "A quick 'Bonjour' goes a long way — the shopkeeper smiles and helps you right away.",
+      wrongText: "The shopkeeper's mood visibly cools — skipping the greeting reads as rude in France."
+    },
+    hazard2: {
+      scenario: "You're invited to a dinner party in France. Do you show up without bringing anything for the host?",
+      options: ["Yes, arrive empty-handed", "No, bring a small gift"],
+      correct: 1,
+      correctText: "Bringing a small gift (wine, flowers, dessert) is exactly what was expected — great instinct.",
+      wrongText: "Your host was clearly expecting a small gift — arriving empty-handed felt a bit off."
+    },
     quiz: [
       { q: "What should you say when entering a French shop?", options: ["Nothing at all", "Bonjour"], correct: 1 },
-      { q: "Where is bread traditionally placed at a French table?", options: ["Directly on the table", "Only on your plate"], correct: 0 }
+      { q: "Where is bread traditionally placed at a French table?", options: ["Directly on the table", "Only on your plate"], correct: 0 },
+      { q: "In France, when someone invites you to a restaurant, who typically pays?", options: ["The person who invited", "Everyone splits it evenly"], correct: 0 }
     ]
   },
   // 3 - EGYPT (built)
@@ -305,12 +503,25 @@ const LEVELS = [
     accent: ACCENT_POOL[2 % 4],
     landmark: "pyramid",
     clue1: "In Egypt, it's customary to accept tea or coffee when offered as a guest, since declining can seem impolite.",
-    clue2: "Many people in Egypt eat and pass food with the right hand, as the left hand is traditionally seen as unclean.",
-    hazard1: "You sat cross-legged and let the sole of your shoe point at your host — an unintentional insult in Egypt.",
-    hazard2: "You reached for the shared platter with your left hand, drawing a few disapproving glances.",
+    clue2: "Egypt is home to the Great Pyramid of Giza, the only surviving wonder of the ancient Seven Wonders of the World.",
+    hazard1: {
+      scenario: "You sit down to relax with your host in Egypt. Do you cross your legs so the sole of your shoe faces them?",
+      options: ["Yes, cross your legs that way", "No, keep your feet flat, soles down"],
+      correct: 1,
+      correctText: "Good instinct — showing the sole of your shoe is considered disrespectful in Egypt.",
+      wrongText: "Your host notices the sole of your shoe pointed their way — an unintentional insult in Egypt."
+    },
+    hazard2: {
+      scenario: "A shared platter of food is passed around. Do you reach in with your left hand?",
+      options: ["Yes, use your left hand", "No, use your right hand"],
+      correct: 1,
+      correctText: "Right hand it is — in Egypt the left hand is traditionally seen as unclean for eating.",
+      wrongText: "A few disapproving glances — the left hand is traditionally seen as unclean for eating in Egypt."
+    },
     quiz: [
       { q: "As a guest in Egypt, if offered tea you should:", options: ["Accept it politely", "Refuse it immediately"], correct: 0 },
-      { q: "Which hand is traditionally used for eating in Egypt?", options: ["The left hand", "The right hand"], correct: 1 }
+      { q: "Which hand is traditionally used for eating in Egypt?", options: ["The left hand", "The right hand"], correct: 1 },
+      { q: "Before entering a mosque in Egypt, what should visitors do?", options: ["Remove their shoes", "Keep shoes on but cover their head"], correct: 0 }
     ]
   },
   // 4 - ITALY (built)
@@ -319,12 +530,25 @@ const LEVELS = [
     accent: ACCENT_POOL[3 % 4],
     landmark: "colosseum",
     clue1: "In Italy, cappuccino is traditionally a breakfast drink and is rarely ordered after 11am or with a meal.",
-    clue2: "During meals in Italy, it's considered polite to keep your hands visible above the table, not in your lap.",
-    hazard1: "You asked for parmesan on your seafood pasta — the chef considers that pairing close to sacrilege.",
-    hazard2: "You started eating before anyone said 'Buon appetito' — the table pauses, a little thrown by it.",
+    clue2: "Italy has more UNESCO World Heritage Sites than any other country, with over 50 officially listed.",
+    hazard1: {
+      scenario: "Your seafood pasta arrives. Do you ask the waiter for extra parmesan on top?",
+      options: ["Yes, ask for extra cheese", "No, skip the cheese"],
+      correct: 1,
+      correctText: "Wise choice — pairing cheese with seafood pasta is considered a culinary misstep in Italy.",
+      wrongText: "The chef winces a little — cheese on seafood pasta is close to sacrilege in Italy."
+    },
+    hazard2: {
+      scenario: "Your plate arrives before everyone else's at the table. Do you start eating right away?",
+      options: ["Yes, start eating immediately", "No, wait and say 'Buon appetito'"],
+      correct: 1,
+      correctText: "Waiting and sharing a 'Buon appetito' is the polite move at an Italian table.",
+      wrongText: "The table pauses awkwardly — starting before 'Buon appetito' felt a little rushed."
+    },
     quiz: [
       { q: "When is cappuccino traditionally consumed in Italy?", options: ["In the morning", "Right after dinner"], correct: 0 },
-      { q: "Where should your hands stay during an Italian meal?", options: ["In your lap", "Visible above the table"], correct: 1 }
+      { q: "Where should your hands stay during an Italian meal?", options: ["In your lap", "Visible above the table"], correct: 1 },
+      { q: "In Italy, pizza is traditionally eaten using:", options: ["A fork and knife", "Always just your hands"], correct: 0 }
     ]
   },
   // 5 - BRAZIL (built)
@@ -333,103 +557,457 @@ const LEVELS = [
     accent: ACCENT_POOL[4 % 4],
     landmark: "christRedeemer",
     clue1: "In Brazil, greetings often include a kiss on the cheek, and the number of kisses can vary by region.",
-    clue2: "The 'thumbs up' gesture is commonly used in Brazil to mean 'okay' or 'great'.",
-    hazard1: "You flashed the 'OK' hand sign to say thanks — in Brazil that gesture can actually read as an insult.",
-    hazard2: "You strolled into a business meeting fashionably late — punctuality mattered a lot more than you thought.",
+    clue2: "Brazil is home to roughly 60% of the Amazon Rainforest, the largest rainforest on Earth.",
+    hazard1: {
+      scenario: "Someone helps you with directions in Brazil. Do you thank them with an 'OK' hand sign (thumb and finger circle)?",
+      options: ["Yes, flash the 'OK' sign", "No, use a thumbs up instead"],
+      correct: 1,
+      correctText: "Good move — the 'OK' sign can actually read as an insult in Brazil, unlike a thumbs up.",
+      wrongText: "Their expression shifts — the 'OK' sign is considered an insult in Brazil."
+    },
+    hazard2: {
+      scenario: "You have a business meeting in Brazil. Do you show up a bit late and treat it casually?",
+      options: ["Yes, arrive fashionably late", "No, arrive on time"],
+      correct: 1,
+      correctText: "Punctuality for business matters in Brazil, even if social events run more relaxed — good call.",
+      wrongText: "Your business contacts notice the late arrival — punctuality mattered more than you expected."
+    },
     quiz: [
       { q: "How do people in Brazil often greet each other?", options: ["With a kiss on the cheek", "With a formal bow"], correct: 0 },
-      { q: "What does a 'thumbs up' commonly mean in Brazil?", options: ["Okay / great", "An insult"], correct: 0 }
+      { q: "What does a 'thumbs up' commonly mean in Brazil?", options: ["Okay / great", "An insult"], correct: 0 },
+      { q: "In Brazil, for casual social gatherings among friends, arriving a little later than planned is generally considered:", options: ["Normal and accepted", "Extremely rude"], correct: 0 }
     ]
   },
-  // 6-20 - PLACEHOLDERS (same structure & flow; swap real content in later)
-  { country: "India",        accent: ACCENT_POOL[5 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Mexico",       accent: ACCENT_POOL[6 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Thailand",     accent: ACCENT_POOL[7 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Morocco",      accent: ACCENT_POOL[8 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Germany",      accent: ACCENT_POOL[9 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "South Korea",  accent: ACCENT_POOL[10 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Greece",       accent: ACCENT_POOL[11 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Peru",         accent: ACCENT_POOL[12 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Turkey",       accent: ACCENT_POOL[13 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Kenya",        accent: ACCENT_POOL[14 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Norway",       accent: ACCENT_POOL[15 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Vietnam",      accent: ACCENT_POOL[16 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Spain",        accent: ACCENT_POOL[17 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "New Zealand",  accent: ACCENT_POOL[18 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]},
-  { country: "Argentina",    accent: ACCENT_POOL[19 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
-      { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
-      { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
-  ]}
+  // 6-20 - fully authored, same structure as the built-5 above
+  {
+    country: "India",
+    accent: ACCENT_POOL[5 % 4],
+    landmark: "indiaGate",
+    clue1: "In India, it's customary to eat and greet using the right hand, as the left hand is traditionally considered unclean.",
+    clue2: "India is home to the Taj Mahal, a marble mausoleum built by Emperor Shah Jahan in memory of his wife.",
+    hazard1: {
+      scenario: "You're offered food with your host's left hand at a meal in India. Do you eat it without a second thought?",
+      options: ["Yes, eat it as given", "No, it feels slightly off"],
+      correct: 1,
+      correctText: "Good instinct — the left hand is traditionally associated with hygiene tasks, not food, in India.",
+      wrongText: "A few raised eyebrows — food served or eaten with the left hand can seem impolite in India."
+    },
+    hazard2: {
+      scenario: "You're sitting in someone's home in India and your feet end up pointing toward a small shrine. Do you leave them as they are?",
+      options: ["Yes, it's just a resting position", "No, reposition your feet away from it"],
+      correct: 1,
+      correctText: "Smart move — pointing your feet at people or sacred objects is considered disrespectful in India.",
+      wrongText: "Your host quietly notices — feet pointed at a shrine or at people is seen as disrespectful in India."
+    },
+    quiz: [
+      { q: "In India, which hand is traditionally used for eating and greeting?", options: ["The right hand", "The left hand"], correct: 0 },
+      { q: "A common greeting in India is pressing your palms together and saying:", options: ["Namaste", "Aloha"], correct: 0 },
+      { q: "When visiting a Hindu temple in India, visitors are typically expected to:", options: ["Remove their shoes before entering", "Wear shoes at all times"], correct: 0 }
+    ]
+  },
+  {
+    country: "Mexico",
+    accent: ACCENT_POOL[6 % 4],
+    landmark: "angelIndependence",
+    clue1: "In Mexico, arriving 10-30 minutes late to a casual social gathering is common and generally accepted.",
+    clue2: "Mexico City is built atop the ruins of Tenochtitlan, the former capital of the Aztec Empire.",
+    hazard1: {
+      scenario: "You're at a business meeting in Mexico and want to get straight to business. Do you skip the friendly small talk?",
+      options: ["Yes, get straight to business", "No, spend a few minutes on friendly conversation first"],
+      correct: 1,
+      correctText: "Good call — building rapport with some small talk first is valued in Mexican business culture.",
+      wrongText: "Your Mexican counterparts seem a little thrown — skipping straight to business without small talk can come across as brusque."
+    },
+    hazard2: {
+      scenario: "You're handed a small gift by a Mexican host. Do you open it immediately in front of them?",
+      options: ["Yes, open it right away", "No, set it aside to open later"],
+      correct: 1,
+      correctText: "Nice instinct — gifts are traditionally set aside to open later rather than opened immediately in Mexico.",
+      wrongText: "Your host looks a bit surprised — gifts are traditionally not opened immediately in front of the giver in Mexico."
+    },
+    quiz: [
+      { q: "For a casual social gathering in Mexico, arriving 10-30 minutes late is generally:", options: ["Considered normal", "Considered very rude"], correct: 0 },
+      { q: "In Mexico, it's customary to greet people with a handshake or, among friends, a:", options: ["Kiss on the cheek", "Formal bow"], correct: 0 },
+      { q: "In Mexico, the Day of the Dead (Día de los Muertos) is a holiday that:", options: ["Honors and remembers deceased loved ones", "Is meant to scare away spirits"], correct: 0 }
+    ]
+  },
+  {
+    country: "Thailand",
+    accent: ACCENT_POOL[7 % 4],
+    landmark: "watArun",
+    clue1: "In Thailand, it's considered very disrespectful to touch someone's head or point your feet at a person or a Buddha image.",
+    clue2: "Thailand is the only country in Southeast Asia never colonized by a European power.",
+    hazard1: {
+      scenario: "A child in Thailand does something cute and you want to pat them on the head to show affection. Do you go ahead?",
+      options: ["Yes, pat their head", "No, find another way to show affection"],
+      correct: 1,
+      correctText: "Good instinct — the head is considered the most sacred part of the body in Thailand, even for children.",
+      wrongText: "The parents look uncomfortable — touching someone's head, even a child's, is considered disrespectful in Thailand."
+    },
+    hazard2: {
+      scenario: "You're sitting on the floor in Thailand and your feet are pointing toward a Buddha statue. Do you leave them as they are?",
+      options: ["Yes, it's just a resting position", "No, tuck your feet behind you"],
+      correct: 1,
+      correctText: "Smart — pointing your feet at a Buddha image or a person is seen as disrespectful in Thailand.",
+      wrongText: "A monk nearby notices — pointing your feet at a Buddha image is considered disrespectful in Thailand."
+    },
+    quiz: [
+      { q: "In Thailand, which body part is considered sacred and should not be touched?", options: ["The head", "The shoulder"], correct: 0 },
+      { q: "In Thailand, it's considered rude to point your feet at:", options: ["A person or a Buddha image", "A wall"], correct: 0 },
+      { q: "The traditional Thai greeting, called the 'wai,' involves:", options: ["Pressing palms together and bowing slightly", "Shaking hands firmly"], correct: 0 }
+    ]
+  },
+  {
+    country: "Morocco",
+    accent: ACCENT_POOL[8 % 4],
+    landmark: "hassanTower",
+    clue1: "In Morocco, it's customary to remove your shoes before entering a home or a mosque.",
+    clue2: "Morocco's Chefchaouen, known as the 'Blue City,' is famous for its buildings painted in shades of blue.",
+    hazard1: {
+      scenario: "You're shopping in a Moroccan souk and the vendor gives a price. Do you pay it immediately without discussion?",
+      options: ["Yes, pay the first price given", "No, negotiate a bit first"],
+      correct: 1,
+      correctText: "Good call — haggling is a normal, expected part of shopping in Moroccan markets.",
+      wrongText: "The vendor seems surprised — bargaining over price is a normal, expected custom in Moroccan markets."
+    },
+    hazard2: {
+      scenario: "You're offered mint tea by a Moroccan host. Do you decline since you're not thirsty?",
+      options: ["Yes, politely decline", "No, accept at least a small glass"],
+      correct: 1,
+      correctText: "Good instinct — accepting tea is an important gesture of hospitality in Morocco.",
+      wrongText: "Your host seems a little disappointed — declining offered tea can come across as rejecting their hospitality in Morocco."
+    },
+    quiz: [
+      { q: "Before entering a home or mosque in Morocco, what should you do?", options: ["Remove your shoes", "Keep your shoes on"], correct: 0 },
+      { q: "In Moroccan markets (souks), haggling over prices is:", options: ["Common and expected", "Considered rude"], correct: 0 },
+      { q: "Mint tea in Morocco is traditionally poured from:", options: ["A height, to create a light foam", "Directly with no ceremony"], correct: 0 }
+    ]
+  },
+  {
+    country: "Germany",
+    accent: ACCENT_POOL[9 % 4],
+    landmark: "brandenburgGate",
+    clue1: "In Germany, punctuality is highly valued — arriving even a few minutes late to a meeting is considered impolite.",
+    clue2: "Germany is home to over 1,500 different types of sausage (Wurst) and more than 300 varieties of bread.",
+    hazard1: {
+      scenario: "You have a 3pm meeting in Germany and you're running 10 minutes behind. Do you shrug it off since it's a small delay?",
+      options: ["Yes, a few minutes won't matter", "No, message ahead and hurry — it does matter"],
+      correct: 1,
+      correctText: "Good instinct — punctuality is taken very seriously in Germany, and even small delays are noticed.",
+      wrongText: "Your German colleagues note the late arrival — punctuality is taken very seriously in Germany."
+    },
+    hazard2: {
+      scenario: "You're toasting with a German colleague and you clink glasses while looking down at your drink. Do you keep your eyes down?",
+      options: ["Yes, that's fine", "No, make eye contact while toasting"],
+      correct: 1,
+      correctText: "Good call — making eye contact during a toast is considered proper etiquette in Germany.",
+      wrongText: "Your host mentions, half-joking, that avoiding eye contact during a toast is said to bring bad luck in German tradition."
+    },
+    quiz: [
+      { q: "In Germany, arriving a few minutes late to a meeting is generally seen as:", options: ["Impolite", "Perfectly fine"], correct: 0 },
+      { q: "In Germany, it's customary to make eye contact when clinking glasses and saying:", options: ["'Prost'", "Nothing at all"], correct: 0 },
+      { q: "In Germany, crossing the street when the pedestrian light is red, even with no traffic, is generally:", options: ["Frowned upon", "Commonly ignored by everyone"], correct: 0 }
+    ]
+  },
+  {
+    country: "South Korea",
+    accent: ACCENT_POOL[10 % 4],
+    landmark: "gwanghwamunGate",
+    clue1: "In South Korea, it's polite to use both hands (or support your right arm with your left hand) when giving or receiving items, especially with elders.",
+    clue2: "South Korea is one of the most wired countries in the world, with some of the fastest average internet speeds on the planet.",
+    hazard1: {
+      scenario: "An elder in South Korea hands you a business card. Do you take it with one hand and pocket it right away?",
+      options: ["Yes, one hand is fine, and pocket it quickly", "No, use both hands and look it over first"],
+      correct: 1,
+      correctText: "Good instinct — receiving a card with both hands and reviewing it briefly is a sign of respect in South Korea.",
+      wrongText: "A small awkward pause — taking a card with one hand and quickly pocketing it can come across as dismissive in South Korea."
+    },
+    hazard2: {
+      scenario: "You're sharing drinks with older colleagues in South Korea. Do you pour your own drink?",
+      options: ["Yes, pour your own", "No, let others pour for you, and offer to pour for them"],
+      correct: 1,
+      correctText: "Good call — in South Korea it's customary to pour for others and let them pour for you, rather than serving yourself.",
+      wrongText: "A colleague gently takes the bottle — pouring your own drink is often seen as a bit impolite in South Korea."
+    },
+    quiz: [
+      { q: "In South Korea, when handing something to an elder, it's polite to:", options: ["Use both hands or support your arm", "Use just one hand casually"], correct: 0 },
+      { q: "In South Korea, it's customary to remove your shoes when:", options: ["Entering a home", "Entering a large office building"], correct: 0 },
+      { q: "When drinking with elders in South Korea, it's polite to:", options: ["Turn your head away slightly while sipping", "Face them directly while drinking"], correct: 0 }
+    ]
+  },
+  {
+    country: "Greece",
+    accent: ACCENT_POOL[11 % 4],
+    landmark: "parthenon",
+    clue1: "In Greece, hospitality (philoxenia) is a deeply held value, and guests are often offered food or coffee that it's polite to accept.",
+    clue2: "Greece has more archaeological museums than any other country in the world.",
+    hazard1: {
+      scenario: "A Greek host offers you coffee and something to eat. Do you say you're fine and decline?",
+      options: ["Yes, politely decline", "No, accept at least a little"],
+      correct: 1,
+      correctText: "Good instinct — hospitality is deeply valued in Greece, and accepting a host's offer is the polite response.",
+      wrongText: "Your host looks a little hurt — declining hospitality can feel like a rejection of their generosity in Greece."
+    },
+    hazard2: {
+      scenario: "You want to wave goodbye to someone across a Greek café with your palm open and fingers spread toward them. Do you wave that way?",
+      options: ["Yes, wave with an open palm facing them", "No, use a different kind of wave"],
+      correct: 1,
+      correctText: "Good call — an open palm pushed toward someone (the 'moutza') is actually an insulting gesture in Greece.",
+      wrongText: "They look taken aback — that open-palm gesture, the 'moutza,' is considered an insult in Greece."
+    },
+    quiz: [
+      { q: "In Greece, if a host offers you food or coffee as a guest, it's polite to:", options: ["Accept it", "Refuse it to avoid trouble"], correct: 0 },
+      { q: "In Greece, the 'moutza' hand gesture (an open palm pushed toward someone) is considered:", options: ["An insult", "A friendly wave"], correct: 0 },
+      { q: "Sunday lunch in Greece is traditionally:", options: ["A long, relaxed family meal", "A quick, solitary meal"], correct: 0 }
+    ]
+  },
+  {
+    country: "Peru",
+    accent: ACCENT_POOL[12 % 4],
+    landmark: "limaCathedral",
+    clue1: "In Peru, among friends, a common greeting is a single kiss on the right cheek, while a handshake is more typical in business settings.",
+    clue2: "Peru is home to Machu Picchu, a 15th-century Inca citadel set high in the Andes Mountains.",
+    hazard1: {
+      scenario: "You meet a Peruvian friend-of-a-friend for the first time and only offer a nod instead of any physical greeting. Do you keep it at just a nod?",
+      options: ["Yes, a nod is enough", "No, offer a handshake or cheek kiss as appropriate"],
+      correct: 1,
+      correctText: "Good call — a handshake or a light cheek kiss among acquaintances is the warmer, more expected greeting in Peru.",
+      wrongText: "It feels a little distant — just a nod can seem cold where a handshake or cheek kiss is more expected in Peru."
+    },
+    hazard2: {
+      scenario: "Your Peruvian host serves you a dish you don't recognize. Do you politely refuse to try it?",
+      options: ["Yes, refuse it politely", "No, try at least a small amount"],
+      correct: 1,
+      correctText: "Good instinct — trying at least a little of an offered dish is the polite response in Peru.",
+      wrongText: "Your host looks a bit disappointed — refusing to try an offered dish can come across as impolite in Peru."
+    },
+    quiz: [
+      { q: "In Peru, among friends, a common greeting is:", options: ["A single kiss on the right cheek", "A deep bow"], correct: 0 },
+      { q: "In Peru, meals often include a course of:", options: ["Potatoes, in many different varieties", "Only rice, with no vegetables"], correct: 0 },
+      { q: "In Peru, it's polite to try at least a little of a dish when offered, since declining food can be seen as:", options: ["Impolite", "Perfectly normal"], correct: 0 }
+    ]
+  },
+  {
+    country: "Turkey",
+    accent: ACCENT_POOL[13 % 4],
+    landmark: "anitkabir",
+    clue1: "In Turkey, it's customary to remove your shoes before entering a home.",
+    clue2: "Istanbul is the only city in the world that spans two continents, Europe and Asia, divided by the Bosphorus Strait.",
+    hazard1: {
+      scenario: "Your Turkish host offers you a glass of tea. Do you say you don't drink tea and leave it at that?",
+      options: ["Yes, decline plainly", "No, accept at least one small glass"],
+      correct: 1,
+      correctText: "Good call — accepting a glass of tea is an important part of Turkish hospitality.",
+      wrongText: "Your host looks a bit taken aback — declining offered tea can feel like a small rejection of hospitality in Turkey."
+    },
+    hazard2: {
+      scenario: "You compliment your Turkish host's beautiful rug a little too enthusiastically. Do you keep gushing about how much you love it?",
+      options: ["Yes, keep complimenting it in detail", "No, dial back the praise a little"],
+      correct: 1,
+      correctText: "Good instinct — overly admiring an item can prompt a generous host to feel obligated to offer it to you in Turkey.",
+      wrongText: "Your host offers to give you the rug — lavishly praising an item can be taken as a hint you'd like it in Turkish culture."
+    },
+    quiz: [
+      { q: "Before entering a home in Turkey, what should you do?", options: ["Remove your shoes", "Keep your shoes on"], correct: 0 },
+      { q: "In Turkey, turning down an offer of tea from a host is generally seen as:", options: ["A little impolite", "Totally normal"], correct: 0 },
+      { q: "In Turkey, complimenting an item your host owns a little too much may lead them to:", options: ["Offer to give it to you", "Ignore the comment entirely"], correct: 0 }
+    ]
+  },
+  {
+    country: "Kenya",
+    accent: ACCENT_POOL[14 % 4],
+    landmark: "kiccTower",
+    clue1: "In Kenya, greetings are important and often unhurried — it's polite to ask about a person's family and well-being before discussing business.",
+    clue2: "Kenya is home to the Great Migration, when over a million wildebeest and zebra cross the Maasai Mara each year.",
+    hazard1: {
+      scenario: "You arrive to meet a Kenyan business contact and want to get straight into the agenda. Do you skip the greetings and small talk?",
+      options: ["Yes, go straight to business", "No, take a moment for greetings first"],
+      correct: 1,
+      correctText: "Good call — warm, unhurried greetings before business are an important part of Kenyan culture.",
+      wrongText: "Your contact seems a little taken aback — skipping straight past greetings can feel abrupt in Kenya."
+    },
+    hazard2: {
+      scenario: "You hand a document to a Kenyan elder using just your left hand. Do you go ahead with just the left hand?",
+      options: ["Yes, one hand is fine", "No, use your right hand or both hands"],
+      correct: 1,
+      correctText: "Good instinct — using the right hand, or both hands, when giving something to someone (especially an elder) is the respectful custom in Kenya.",
+      wrongText: "A small pause — handing something over with just the left hand can come across as impolite in Kenya."
+    },
+    quiz: [
+      { q: "In Kenya, before discussing business, it's polite to:", options: ["Ask about the person's family and well-being", "Skip straight to the topic"], correct: 0 },
+      { q: "In Kenya, it's respectful to give items to elders using:", options: ["The right hand, or both hands", "Whichever hand is closest"], correct: 0 },
+      { q: "Swahili, one of Kenya's official languages, includes the common greeting:", options: ["'Jambo' or 'Habari'", "'Ciao'"], correct: 0 }
+    ]
+  },
+  {
+    country: "Norway",
+    accent: ACCENT_POOL[15 % 4],
+    landmark: "osloCityHall",
+    clue1: "In Norway, it's customary to take off your shoes when entering someone's home.",
+    clue2: "Norway has more than 1,000 fjords, deep sea inlets carved by ancient glaciers, along its coastline.",
+    hazard1: {
+      scenario: "You're waiting for a bus in Norway and there's an orderly line. Do you push ahead to the front?",
+      options: ["Yes, just move to the front", "No, wait your turn in line"],
+      correct: 1,
+      correctText: "Good instinct — orderly queuing and respecting personal space are strongly valued in Norway.",
+      wrongText: "A few disapproving looks — queue-jumping stands out as impolite in Norway, where orderly lines are the norm."
+    },
+    hazard2: {
+      scenario: "You want to drop by a Norwegian friend's house unannounced for a casual visit. Do you just show up?",
+      options: ["Yes, just show up", "No, call or message ahead first"],
+      correct: 1,
+      correctText: "Good call — in Norway it's customary to arrange visits in advance rather than dropping in unannounced.",
+      wrongText: "Your friend seems a bit caught off guard — unannounced visits are less common in Norway, where plans are usually made ahead of time."
+    },
+    quiz: [
+      { q: "When entering a home in Norway, what should you do?", options: ["Take off your shoes", "Keep your shoes on"], correct: 0 },
+      { q: "In Norway, personal space and quiet, orderly queuing are generally:", options: ["Highly valued", "Not important at all"], correct: 0 },
+      { q: "In Norway, showing up to a dinner invitation without confirming in advance is considered:", options: ["Unusual — RSVPs are expected", "Perfectly normal, drop-ins are welcome"], correct: 0 }
+    ]
+  },
+  {
+    country: "Vietnam",
+    accent: ACCENT_POOL[16 % 4],
+    landmark: "onePillarPagoda",
+    clue1: "In Vietnam, it's polite to use both hands when giving or receiving business cards, gifts, or money.",
+    clue2: "Vietnam is the world's second-largest exporter of coffee, after Brazil.",
+    hazard1: {
+      scenario: "You're handed a business card in Vietnam and you take it with just one hand while glancing at your phone. Do you accept it that way?",
+      options: ["Yes, one hand while distracted is fine", "No, use both hands and give it your attention"],
+      correct: 1,
+      correctText: "Good instinct — accepting a card with both hands and a moment of attention shows respect in Vietnam.",
+      wrongText: "A brief awkward pause — taking a card one-handed while distracted can come across as dismissive in Vietnam."
+    },
+    hazard2: {
+      scenario: "You want to point out a person to a friend on a crowded Vietnamese street. Do you point directly at them with one finger?",
+      options: ["Yes, point with one finger", "No, gesture with an open hand instead"],
+      correct: 1,
+      correctText: "Good call — pointing with a single finger is considered rude in Vietnam; an open hand is the polite way to gesture.",
+      wrongText: "Your friend flinches slightly — pointing directly at someone with a single finger is considered rude in Vietnam."
+    },
+    quiz: [
+      { q: "In Vietnam, when giving or receiving a gift or business card, it's polite to use:", options: ["Both hands", "Whichever hand is free"], correct: 0 },
+      { q: "In Vietnam, it's considered impolite to point at someone using:", options: ["A single finger", "An open hand"], correct: 0 },
+      { q: "In Vietnam, addressing someone by the correct family or honorific title is:", options: ["Important and shows respect", "Not really necessary"], correct: 0 }
+    ]
+  },
+  {
+    country: "Spain",
+    accent: ACCENT_POOL[17 % 4],
+    landmark: "puertaAlcala",
+    clue1: "In Spain, dinner is traditionally eaten quite late, often starting around 9 or 10pm.",
+    clue2: "Spain has the second-highest number of UNESCO World Heritage Sites in the world, after Italy.",
+    hazard1: {
+      scenario: "You show up at a Spanish friend's home for dinner right at 6pm expecting the meal to start immediately. Do you expect dinner right away?",
+      options: ["Yes, expect dinner right at 6pm", "No, expect it much later in the evening"],
+      correct: 1,
+      correctText: "Good instinct — dinner in Spain is traditionally eaten quite late, often 9pm or later.",
+      wrongText: "Your host laughs kindly — dinner in Spain is traditionally eaten much later in the evening, often after 9pm."
+    },
+    hazard2: {
+      scenario: "You meet a Spanish acquaintance and offer just a handshake instead of the usual two-cheek greeting among friends. Do you stick with the handshake?",
+      options: ["Yes, a handshake is enough", "No, go for the two-cheek kiss greeting"],
+      correct: 1,
+      correctText: "Good call — among friends and in many social settings, a kiss on each cheek is the warmer, more expected greeting in Spain.",
+      wrongText: "It feels a touch formal — a handshake can seem a bit stiff where a two-cheek kiss is the more common greeting among friends in Spain."
+    },
+    quiz: [
+      { q: "In Spain, dinner is traditionally eaten:", options: ["Quite late, around 9-10pm", "Early, around 5pm"], correct: 0 },
+      { q: "In Spain, the afternoon rest period after lunch is traditionally called:", options: ["The siesta", "The fiesta"], correct: 0 },
+      { q: "In Spain, greeting friends with two kisses, one on each cheek, is:", options: ["Common and expected", "Considered too familiar"], correct: 0 }
+    ]
+  },
+  {
+    country: "New Zealand",
+    accent: ACCENT_POOL[18 % 4],
+    landmark: "beehive",
+    clue1: "In New Zealand, the Māori greeting 'hongi' involves pressing noses and foreheads together as a sign of respect and connection.",
+    clue2: "New Zealand was the first country in the world to give women the right to vote, in 1893.",
+    hazard1: {
+      scenario: "You're invited to a Māori welcome ceremony (pōwhiri) in New Zealand and you decide to just wave from a distance rather than take part. Do you keep your distance?",
+      options: ["Yes, just wave from afar", "No, take part respectfully as guided"],
+      correct: 1,
+      correctText: "Good instinct — respectfully taking part in a pōwhiri or hongi when invited is a meaningful sign of respect in New Zealand.",
+      wrongText: "You miss a meaningful moment — respectfully joining in when invited to a welcome ceremony is valued in New Zealand."
+    },
+    hazard2: {
+      scenario: "You're running 20 minutes late to a casual meetup in New Zealand and decide not to bother messaging ahead. Do you skip the heads-up?",
+      options: ["Yes, just show up whenever", "No, send a quick message that you're running late"],
+      correct: 1,
+      correctText: "Good call — punctuality is valued in New Zealand, and a heads-up when you're running late is appreciated.",
+      wrongText: "Your friends wonder what happened — punctuality is valued in New Zealand, so a quick message when running late is appreciated."
+    },
+    quiz: [
+      { q: "The traditional Māori greeting where noses and foreheads touch is called:", options: ["The hongi", "The haka"], correct: 0 },
+      { q: "In New Zealand, being on time for social and business meetings is generally:", options: ["Expected and appreciated", "Not important at all"], correct: 0 },
+      { q: "The 'haka' is a traditional Māori:", options: ["Ceremonial dance/chant", "Type of food"], correct: 0 }
+    ]
+  },
+  {
+    country: "Argentina",
+    accent: ACCENT_POOL[19 % 4],
+    landmark: "obelisco",
+    clue1: "In Argentina, it's customary to greet with a single kiss on the cheek, even between men who are friends or being introduced.",
+    clue2: "Argentina is home to the birthplace of tango, a dance and music style that originated in Buenos Aires in the late 19th century.",
+    hazard1: {
+      scenario: "You're introduced to a new Argentine acquaintance (a man) and you only offer a handshake instead of the customary cheek kiss. Do you stick with just the handshake?",
+      options: ["Yes, a handshake only", "No, a light cheek kiss is more customary"],
+      correct: 1,
+      correctText: "Good call — a single kiss on the cheek is the customary greeting in Argentina, even between men.",
+      wrongText: "It feels a little stiff — a cheek kiss, even between men, is the more customary greeting in Argentina."
+    },
+    hazard2: {
+      scenario: "You're passed a shared gourd of mate in Argentina and you ask for your own separate cup instead of drinking from the shared one. Do you ask for a separate cup?",
+      options: ["Yes, ask for your own cup", "No, drink from the shared gourd as passed"],
+      correct: 1,
+      correctText: "Good instinct — sharing the same gourd and straw around the group is the traditional way mate is enjoyed in Argentina.",
+      wrongText: "A slightly puzzled look — mate is traditionally shared from one gourd around the group in Argentina, not served separately."
+    },
+    quiz: [
+      { q: "In Argentina, a common greeting between friends (including men) is:", options: ["A single kiss on the cheek", "A deep bow"], correct: 0 },
+      { q: "In Argentina, sharing mate (a traditional caffeinated drink) with a group typically involves:", options: ["Passing one gourd and straw around the group", "Everyone getting their own separate cup"], correct: 0 },
+      { q: "In Argentina, dinner is often eaten:", options: ["Quite late, sometimes after 9 or 10pm", "Early, around 5pm"], correct: 0 }
+    ]
+  }
 ];
 
 /* ---------------------------------------------------------------------
-   DATA LAYER: fixed single-screen tile layout (re-used by every level;
-   never regenerated). Coordinates are canvas pixels (480x360 internal).
+   DATA LAYER: fixed world-map layout (re-used by every level; never
+   regenerated). Coordinates are WORLD pixels — the world is bigger than
+   the 480x360 viewport, so the camera scrolls to follow the player (see
+   `camera` state and render()). The player starts at WORLD_START and has
+   to wander to find the 4 signpost encounters; the capital landmark,
+   its bench, and the customs officer sit together at the far end.
 
    Disguise design: the 4 physical slot positions below are always the
-   same, and every slot is drawn as an identical "local" sprite (see
-   drawEncounterSlot) — there is no visual tell for which slots hold a
+   same, and every slot is drawn as an identical wooden signpost (see
+   drawSignpostSlot) — there is no visual tell for which slots hold a
    helpful clue vs. a harmful hazard. ENCOUNTER_PATTERNS assigns which
    of the level's clue1/clue2/hazard1/hazard2 content lives in which
    physical slot, statically per level (not randomized at runtime), so
-   the same screen position isn't safe/dangerous every single level.
+   the same world position isn't safe/dangerous every single level.
 --------------------------------------------------------------------- */
-const PLAYER_START = { x: 210, y: 300 };
+const WORLD_WIDTH = 1600;
+const WORLD_HEIGHT = 900;
+
+const PLAYER_START = { x: 70, y: 430 };
 const PLAYER_SIZE = 28;
 
-const TILE_SIZE = 60;
+const TILE_SIZE = 64;
 const LAYOUT = {
-  officer: { x: 200, y: 26,  w: 80, h: 50 },
-  slotTL:  { x: 36,  y: 138, w: TILE_SIZE, h: TILE_SIZE },
-  slotTR:  { x: 384, y: 138, w: TILE_SIZE, h: TILE_SIZE },
-  slotBL:  { x: 36,  y: 262, w: TILE_SIZE, h: TILE_SIZE },
-  slotBR:  { x: 384, y: 262, w: TILE_SIZE, h: TILE_SIZE }
-};
-const SLOT_KEYS = ['slotTL', 'slotTR', 'slotBL', 'slotBR'];
+  // Far end of the map: capital landmark + bench + officer, side by side
+  officer: { x: 1460, y: 460, w: 70, h: 54 },
+  landmarkPos: { x: 1340, y: 420 }, // reference point drawWorldLandmark() draws around (scaled 6x, keep clear of the world edge)
+  benchPos: { x: 1460, y: 500 },
 
-// Each entry maps content keys onto [slotTL, slotTR, slotBL, slotBR], in some order.
+  slot1: { x: 430,  y: 160, w: TILE_SIZE, h: TILE_SIZE },
+  slot2: { x: 720,  y: 660, w: TILE_SIZE, h: TILE_SIZE },
+  slot3: { x: 1000, y: 210, w: TILE_SIZE, h: TILE_SIZE },
+  slot4: { x: 1260, y: 700, w: TILE_SIZE, h: TILE_SIZE }
+};
+const SLOT_KEYS = ['slot1', 'slot2', 'slot3', 'slot4'];
+
+// Each entry maps content keys onto [slot1, slot2, slot3, slot4], in some order.
 // Every permutation contains exactly clue1, clue2, hazard1, hazard2 once each.
 const ENCOUNTER_PATTERNS = [
   ['clue1',   'hazard1', 'hazard2', 'clue2'],
@@ -445,23 +1023,28 @@ const ENCOUNTER_PATTERNS = [
 // ---- Persistent run state (never resets on level transition, only on restart) ----
 let vibeIndex = VIBE_START;
 let stamps = 0;
-let levelIndex = 1; // absolute level count across the whole run (keeps climbing past 20)
-let currentLevel = LEVELS[(levelIndex - 1) % LEVELS.length];
+let levelIndex = 1; // absolute level count across the whole run (keeps climbing past 20; drives Vibe scaling)
+let currentLevel = LEVELS[0]; // overwritten by loadLevel() before the title screen is ever dismissed
 
 // ---- Per-level transient state ----
 let player = { x: PLAYER_START.x, y: PLAYER_START.y };
+let camera = { x: 0, y: 0 }; // top-left world coordinate currently shown in the viewport
 // Which content key (clue1/clue2/hazard1/hazard2) currently backs each physical slot
 let slotAssignment = {};
 
-// ---- Finite state machine: 'title' | 'playing' | 'dialog' | 'quiz' | 'transition' | 'gameover' ----
+// ---- Finite state machine: 'title' | 'playing' | 'dialog' | 'quiz' | 'hazard' | 'transition' | 'gameover' ----
 let gameState = 'title';
 
 // Queued action to run once the current dialog box is dismissed (e.g. open quiz)
 let pendingAfterDialog = null;
 
+// Which hazard content key (hazard1/hazard2) the open hazard-choice modal is for
+let activeHazardKey = null;
+
 // ---- Level transition (passport stamp, then flight) state ----
 let transitionStartTime = 0;
 let transitionNextLevelIdx = null;
+let transitionNextCountryIdx = null;
 let transitionCaption = '';
 
 // ---- Input tracking ----
@@ -478,6 +1061,13 @@ const hudLevel = document.getElementById('hudLevel');
 
 const titleScreen = document.getElementById('titleScreen');
 const startBtn = document.getElementById('startBtn');
+const startCountrySelect = document.getElementById('startCountrySelect');
+
+const dpadUp = document.getElementById('dpadUp');
+const dpadDown = document.getElementById('dpadDown');
+const dpadLeft = document.getElementById('dpadLeft');
+const dpadRight = document.getElementById('dpadRight');
+const interactBtn = document.getElementById('interactBtn');
 
 const dialogBox = document.getElementById('dialogBox');
 const dialogText = document.getElementById('dialogText');
@@ -486,8 +1076,17 @@ const quizModal = document.getElementById('quizModal');
 const quizProgress = document.getElementById('quizProgress');
 const quizCountryName = document.getElementById('quizCountryName');
 const quizQuestion = document.getElementById('quizQuestion');
+const quizOptionGroup = document.getElementById('quizOptionGroup');
 const quizOptionA = document.getElementById('quizOptionA');
 const quizOptionB = document.getElementById('quizOptionB');
+const quizFeedback = document.getElementById('quizFeedback');
+const quizFeedbackText = document.getElementById('quizFeedbackText');
+const quizContinueBtn = document.getElementById('quizContinueBtn');
+
+const hazardModal = document.getElementById('hazardModal');
+const hazardScenario = document.getElementById('hazardScenario');
+const hazardOptionA = document.getElementById('hazardOptionA');
+const hazardOptionB = document.getElementById('hazardOptionB');
 
 const gameOverModal = document.getElementById('gameOverModal');
 const gameOverStats = document.getElementById('gameOverStats');
@@ -500,11 +1099,22 @@ function updateHUD() {
   hudLevel.textContent = `Level: ${levelIndex}`;
 }
 
-function loadLevel(idx) {
+// Uniformly random pick from the country list — used for every level after
+// the player's chosen starting country (level 1 is picked on the title screen).
+function pickRandomCountryIndex() {
+  return Math.floor(Math.random() * LEVELS.length);
+}
+
+// `idx` is the absolute level count (still drives Vibe scaling and never
+// loops); `countryListIdx` is which LEVELS[] entry to show this time — the
+// two are independent now that country order is randomized after level 1.
+function loadLevel(idx, countryListIdx) {
   levelIndex = idx;
-  currentLevel = LEVELS[(levelIndex - 1) % LEVELS.length];
+  currentLevel = LEVELS[countryListIdx];
   player.x = PLAYER_START.x;
   player.y = PLAYER_START.y;
+  camera.x = 0;
+  camera.y = 0;
 
   // Assign this level's disguised content to the fixed physical slots
   const pattern = ENCOUNTER_PATTERNS[(levelIndex - 1) % ENCOUNTER_PATTERNS.length];
@@ -543,18 +1153,42 @@ function flashRed() {
   setTimeout(() => flashOverlay.classList.remove('active'), 160);
 }
 
-function triggerHazard(contentKey) {
+// Disguised hazard slots present a binary "street situation" choice — the
+// wrong pick costs Vibe (scaled like before), the right pick costs nothing.
+function openHazardChoice(contentKey) {
+  gameState = 'hazard';
+  activeHazardKey = contentKey;
+  const h = currentLevel[contentKey];
+  hazardScenario.textContent = h.scenario;
+  hazardOptionA.textContent = h.options[0];
+  hazardOptionB.textContent = h.options[1];
+  hazardModal.classList.remove('hidden');
+}
+
+function answerHazard(selectedIndex) {
+  hazardModal.classList.add('hidden');
+  const h = currentLevel[activeHazardKey];
+  activeHazardKey = null;
+
+  if (selectedIndex === h.correct) {
+    showDialog(h.correctText);
+    return;
+  }
+
   const amount = getVibeAmount(levelIndex);
   vibeIndex = Math.max(VIBE_MIN, vibeIndex - amount);
   flashRed();
   updateHUD();
-  const message = `${currentLevel[contentKey]} (-${amount} Vibe)`;
+  const message = `${h.wrongText} (-${amount} Vibe)`;
   if (vibeIndex <= VIBE_MIN) {
     showDialog(message, () => triggerGameOver());
   } else {
     showDialog(message);
   }
 }
+
+hazardOptionA.addEventListener('click', () => answerHazard(0));
+hazardOptionB.addEventListener('click', () => answerHazard(1));
 
 function triggerGameOver() {
   gameState = 'gameover';
@@ -565,10 +1199,11 @@ function triggerGameOver() {
 function restartGame() {
   vibeIndex = VIBE_START;
   stamps = 0;
-  loadLevel(1);
   gameOverModal.classList.add('hidden');
   dialogBox.classList.add('hidden');
-  gameState = 'playing';
+  // Back to the title screen so the player can choose a starting country again
+  titleScreen.classList.remove('hidden');
+  gameState = 'title';
 }
 
 /* ---------------------------------------------------------------------
@@ -576,6 +1211,9 @@ function restartGame() {
 --------------------------------------------------------------------- */
 let quizQuestionIdx = 0;
 let quizCorrectCount = 0;
+// Guards each question against being answered more than once within this
+// single customs visit — set once an answer is picked, cleared per question.
+let quizAnswered = false;
 
 function openQuiz() {
   gameState = 'quiz';
@@ -588,26 +1226,64 @@ function openQuiz() {
 
 function renderQuizQuestion() {
   const q = currentLevel.quiz[quizQuestionIdx];
+  quizAnswered = false;
   quizProgress.textContent = `Question ${quizQuestionIdx + 1} of ${currentLevel.quiz.length}`;
   quizQuestion.textContent = q.q;
   quizOptionA.textContent = q.options[0];
   quizOptionB.textContent = q.options[1];
+  [quizOptionA, quizOptionB].forEach((btn) => btn.classList.remove('correct', 'wrong', 'locked'));
+  quizOptionGroup.classList.remove('hidden');
+  quizFeedback.classList.add('hidden');
 }
 
+// Selecting an answer recolors the buttons in place (correct → mid-purple
+// fill, wrong pick → dimmed) and shows feedback text; advancing to the next
+// question waits for the Continue click. Incorrect answers cost Vibe
+// immediately, same scaling as a hazard hit.
 function answerQuiz(selectedIndex) {
+  if (quizAnswered) return; // this question is already locked in for this visit
+  quizAnswered = true;
+
   const q = currentLevel.quiz[quizQuestionIdx];
-  if (selectedIndex === q.correct) quizCorrectCount++;
+  const isCorrect = selectedIndex === q.correct;
+  const buttons = [quizOptionA, quizOptionB];
+
+  buttons[q.correct].classList.add('correct');
+  if (!isCorrect) buttons[selectedIndex].classList.add('wrong');
+  buttons.forEach((btn) => btn.classList.add('locked'));
+
+  if (isCorrect) {
+    quizCorrectCount++;
+    quizFeedbackText.textContent = 'Correct!';
+  } else {
+    const amount = getVibeAmount(levelIndex);
+    vibeIndex = Math.max(VIBE_MIN, vibeIndex - amount);
+    flashRed();
+    updateHUD();
+    quizFeedbackText.textContent = `Incorrect. The correct answer was: "${q.options[q.correct]}" (-${amount} Vibe)`;
+  }
+
+  quizFeedback.classList.remove('hidden');
+}
+
+quizContinueBtn.addEventListener('click', () => {
+  if (vibeIndex <= VIBE_MIN) {
+    quizModal.classList.add('hidden');
+    triggerGameOver();
+    return;
+  }
+
   quizQuestionIdx++;
   if (quizQuestionIdx < currentLevel.quiz.length) {
     renderQuizQuestion();
   } else {
     finishQuiz();
   }
-}
+});
 
 function finishQuiz() {
   quizModal.classList.add('hidden');
-  const passed = quizCorrectCount === currentLevel.quiz.length;
+  const passed = quizCorrectCount >= QUIZ_PASS_THRESHOLD;
   if (passed) {
     stamps++;
     // Compute using the level just being completed, before it increments.
@@ -615,9 +1291,9 @@ function finishQuiz() {
     vibeIndex = Math.min(VIBE_MAX, vibeIndex + amount);
     updateHUD();
     const nextIdx = levelIndex + 1;
-    startLevelTransition(nextIdx, `+${amount} Vibe`);
+    const nextCountryIdx = pickRandomCountryIndex();
+    startLevelTransition(nextIdx, nextCountryIdx, `+${amount} Vibe`);
   } else {
-    // Failing a quiz never reduces vibeIndex — it simply withholds the bonus.
     showDialog(`Quiz failed! The officer sends you back to review the clues and try again.`);
   }
 }
@@ -626,10 +1302,38 @@ quizOptionA.addEventListener('click', () => answerQuiz(0));
 quizOptionB.addEventListener('click', () => answerQuiz(1));
 restartBtn.addEventListener('click', restartGame);
 
+// Populate the "start at country" dropdown from the level data. The player
+// picks their first country here; every country after that is chosen at
+// random from this same list (see pickRandomCountryIndex()).
+LEVELS.forEach((level, i) => {
+  const opt = document.createElement('option');
+  opt.value = String(i);
+  opt.textContent = level.country;
+  startCountrySelect.appendChild(opt);
+});
+
 startBtn.addEventListener('click', () => {
+  const chosenCountryIdx = parseInt(startCountrySelect.value, 10) || 0;
   titleScreen.classList.add('hidden');
+  loadLevel(1, chosenCountryIdx);
   gameState = 'playing';
 });
+
+// Touch controls: mirror the keyboard exactly (same keysDown set and the
+// same handleInteract() used by Space/Z) — no new input-handling logic.
+function bindHoldButton(el, keyCode) {
+  const press = (e) => { e.preventDefault(); keysDown.add(keyCode); };
+  const release = (e) => { e.preventDefault(); keysDown.delete(keyCode); };
+  el.addEventListener('pointerdown', press);
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointerleave', release);
+  el.addEventListener('pointercancel', release);
+}
+bindHoldButton(dpadUp, 'ArrowUp');
+bindHoldButton(dpadDown, 'ArrowDown');
+bindHoldButton(dpadLeft, 'ArrowLeft');
+bindHoldButton(dpadRight, 'ArrowRight');
+interactBtn.addEventListener('click', () => handleInteract());
 
 /* ---------------------------------------------------------------------
    Level transition: passport stamp (country-specific), then it clears,
@@ -638,9 +1342,10 @@ startBtn.addEventListener('click', () => {
    it's still the just-cleared country being stamped; loadLevel(nextIdx)
    only runs once the whole sequence finishes (see update()).
 --------------------------------------------------------------------- */
-function startLevelTransition(nextIdx, caption) {
+function startLevelTransition(nextIdx, nextCountryIdx, caption) {
   gameState = 'transition';
   transitionNextLevelIdx = nextIdx;
+  transitionNextCountryIdx = nextCountryIdx;
   transitionCaption = caption;
   transitionStartTime = performance.now();
 }
@@ -679,7 +1384,7 @@ function handleInteract() {
   }
 
   // Disguised encounter slots: every slot looks identical, so the only way
-  // to learn whether it's a helpful clue or a harmful hazard is to engage
+  // to learn whether it's a helpful clue or a risky situation is to engage
   // with it (Space/Z) — nothing is revealed just by walking onto it.
   for (const slotKey of SLOT_KEYS) {
     if (rectsOverlap(pRect, LAYOUT[slotKey])) {
@@ -687,7 +1392,7 @@ function handleInteract() {
       if (contentKey.startsWith('clue')) {
         showDialog(`A friendly local shares a tip: "${currentLevel[contentKey]}"`);
       } else {
-        triggerHazard(contentKey);
+        openHazardChoice(contentKey);
       }
       return;
     }
@@ -707,8 +1412,9 @@ function update() {
     const elapsed = performance.now() - transitionStartTime;
     if (elapsed >= TRANSITION_TOTAL_MS) {
       const nextIdx = transitionNextLevelIdx;
+      const nextCountryIdx = transitionNextCountryIdx;
       gameState = 'playing';
-      loadLevel(nextIdx);
+      loadLevel(nextIdx, nextCountryIdx);
     }
     return;
   }
@@ -722,134 +1428,424 @@ function update() {
 
     if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; } // normalize diagonal speed
 
-    player.x = Math.max(4, Math.min(canvas.width - PLAYER_SIZE - 4, player.x + dx * SPEED));
-    player.y = Math.max(4, Math.min(canvas.height - PLAYER_SIZE - 4, player.y + dy * SPEED));
+    player.x = Math.max(4, Math.min(WORLD_WIDTH - PLAYER_SIZE - 4, player.x + dx * SPEED));
+    player.y = Math.max(4, Math.min(WORLD_HEIGHT - PLAYER_SIZE - 4, player.y + dy * SPEED));
+
+    // Camera follows the player, clamped so the viewport never shows past the world edge
+    camera.x = Math.max(0, Math.min(WORLD_WIDTH - canvas.width, player.x + PLAYER_SIZE / 2 - canvas.width / 2));
+    camera.y = Math.max(0, Math.min(WORLD_HEIGHT - canvas.height, player.y + PLAYER_SIZE / 2 - canvas.height / 2));
   }
 }
 
 /* ---------------------------------------------------------------------
-   Render loop (Canvas2D) — GB-blocky tiles, accent color per level
+   Render loop (Canvas2D) — cozy village art, drawn with plain canvas
+   primitives (rounded rects, circles, triangles, arcs). Tile positions,
+   sizes and collision are untouched above; only their appearance changes.
 --------------------------------------------------------------------- */
-function drawTile(tile, label, fillColor, textColor) {
-  ctx.fillStyle = fillColor;
-  ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
-  ctx.strokeStyle = PALETTE.darkest;
-  ctx.lineWidth = 3;
-  ctx.strokeRect(tile.x, tile.y, tile.w, tile.h);
-  ctx.fillStyle = textColor;
-  ctx.font = 'bold 26px Courier New';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, tile.x + tile.w / 2, tile.y + tile.h / 2 + 2);
+
+// Rounded-rect helper reused by every building/board/character below.
+function drawRoundedRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
-// Every disguised encounter slot renders identically (a simple "local"
-// silhouette) regardless of whether it secretly holds a clue or a hazard —
-// the look never gives away which is which; only engaging (Space/Z) does.
-function drawEncounterSlot(tile) {
-  ctx.fillStyle = PALETTE.lightest;
-  ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
-  ctx.strokeStyle = PALETTE.darkest;
-  ctx.lineWidth = 3;
-  ctx.strokeRect(tile.x, tile.y, tile.w, tile.h);
+// Fixed stone-fleck positions across the whole world, computed once at
+// load so they stay put frame to frame instead of flickering.
+const PATH_SPECKLES = Array.from({ length: 260 }, () => ({
+  x: Math.random() * WORLD_WIDTH,
+  y: Math.random() * WORLD_HEIGHT,
+  r: 1 + Math.random() * 1.5
+}));
 
+// Dirt plaza path — the walkable floor, now the size of the whole world.
+// A subtle darker edge on two sides and scattered stone flecks give it depth.
+function drawFloor() {
+  ctx.fillStyle = SCENE_PALETTE.dirt;
+  ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+  ctx.fillStyle = SCENE_PALETTE.dirtEdge;
+  ctx.fillRect(0, 0, WORLD_WIDTH, 6);
+  ctx.fillRect(0, 0, 6, WORLD_HEIGHT);
+
+  ctx.fillStyle = SCENE_PALETTE.dirtDark;
+  PATH_SPECKLES.forEach((p) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawLeafBlob(x, y, r) {
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Low garden hedge tracing the whole world's border — two overlapping
+// passes of soft green blobs instead of a hard wall.
+function drawHedgeBorder() {
+  const step = 22;
+  ctx.fillStyle = SCENE_PALETTE.leavesDark;
+  for (let x = 0; x <= WORLD_WIDTH; x += step) {
+    drawLeafBlob(x, 6, 9);
+    drawLeafBlob(x, WORLD_HEIGHT - 6, 9);
+  }
+  for (let y = 0; y <= WORLD_HEIGHT; y += step) {
+    drawLeafBlob(6, y, 9);
+    drawLeafBlob(WORLD_WIDTH - 6, y, 9);
+  }
+  ctx.fillStyle = SCENE_PALETTE.leaves;
+  for (let x = 11; x <= WORLD_WIDTH; x += step) {
+    drawLeafBlob(x, 6, 7);
+    drawLeafBlob(x, WORLD_HEIGHT - 6, 7);
+  }
+  for (let y = 11; y <= WORLD_HEIGHT; y += step) {
+    drawLeafBlob(6, y, 7);
+    drawLeafBlob(WORLD_WIDTH - 6, y, 7);
+  }
+}
+
+// Trunk + two overlapping leaf blobs — used only as background atmosphere.
+function drawTree(x, y, scale) {
+  const s = scale || 1;
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.fillRect(x - 3 * s, y, 6 * s, 14 * s);
+  ctx.fillStyle = SCENE_PALETTE.leavesDark;
+  ctx.beginPath();
+  ctx.arc(x - 7 * s, y - 6 * s, 11 * s, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = SCENE_PALETTE.leaves;
+  ctx.beginPath();
+  ctx.arc(x + 6 * s, y - 8 * s, 12 * s, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Reusable cottage/building drawer — used for the customs house, café,
+// restaurant, and the decorative city-style buildings scattered along the
+// path. Purely decorative geometry; opts:
+// { roof: 'tile'|'thatch'|'pagoda'|'dome'|'mansard', wall, door, window,
+//   flagColor, awning, awningColor, icon }
+function drawCottage(x, y, w, h, opts) {
+  opts = opts || {};
+  const roofStyle = opts.roof || 'tile';
+  const roofColor = roofStyle === 'thatch' ? SCENE_PALETTE.roofThatch : SCENE_PALETTE.roofTile;
+  const roofDark = roofStyle === 'thatch' ? SCENE_PALETTE.roofThatchDark : SCENE_PALETTE.roofTileDark;
+  const roofH = h * 0.45;
+  const wallColor = opts.wall || SCENE_PALETTE.wall;
+
+  ctx.fillStyle = wallColor;
+  ctx.strokeStyle = SCENE_PALETTE.woodDark;
+  ctx.lineWidth = 2;
+  drawRoundedRect(x, y + roofH, w, h - roofH, 4);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = roofColor;
+  ctx.strokeStyle = roofDark;
+
+  if (roofStyle === 'dome') {
+    // rounded dome — Mughal/Islamic-style capital architecture
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + roofH, w / 2 + 3, Math.PI, 0);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath(); // small finial
+    ctx.arc(x + w / 2, y + roofH - w / 2 - 6, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (roofStyle === 'pagoda') {
+    // two-tier flared roof — East/Southeast Asian capital architecture
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y + roofH * 0.62);
+    ctx.lineTo(x + w / 2, y + roofH * 0.1);
+    ctx.lineTo(x + w + 8, y + roofH * 0.62);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y + roofH);
+    ctx.lineTo(x + w / 2, y + roofH * 0.5);
+    ctx.lineTo(x + w + 4, y + roofH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (roofStyle === 'mansard') {
+    // steep-sided, flatter-topped roof — European capital architecture
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y + roofH);
+    ctx.lineTo(x + w * 0.18, y - 2);
+    ctx.lineTo(x + w * 0.82, y - 2);
+    ctx.lineTo(x + w + 4, y + roofH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    // 'tile' / 'thatch': simple triangular roof
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y + roofH);
+    ctx.lineTo(x + w / 2, y - 2);
+    ctx.lineTo(x + w + 4, y + roofH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  if (opts.door !== false) {
+    const doorW = w * 0.28, doorH = (h - roofH) * 0.62;
+    ctx.fillStyle = SCENE_PALETTE.woodTrim;
+    ctx.strokeStyle = SCENE_PALETTE.woodDark;
+    drawRoundedRect(x + w / 2 - doorW / 2, y + h - doorH, doorW, doorH, 3);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  if (opts.window !== false) {
+    const winSize = Math.min(w, h) * 0.22;
+    ctx.fillStyle = SCENE_PALETTE.stone;
+    ctx.strokeStyle = SCENE_PALETTE.woodDark;
+    drawRoundedRect(x + w * 0.16, y + roofH + 6, winSize, winSize, 3);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  if (opts.flagColor) {
+    ctx.strokeStyle = SCENE_PALETTE.woodDark;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2, y - 2);
+    ctx.lineTo(x + w / 2, y - 18);
+    ctx.stroke();
+    ctx.fillStyle = opts.flagColor;
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2, y - 18);
+    ctx.lineTo(x + w / 2 + 14, y - 14);
+    ctx.lineTo(x + w / 2, y - 10);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if (opts.awning) {
+    ctx.fillStyle = opts.awningColor || SCENE_PALETTE.roofTile;
+    ctx.fillRect(x + w * 0.12, y + roofH - 2, w * 0.76, 8);
+  }
+
+  if (opts.icon === 'cup') {
+    ctx.strokeStyle = SCENE_PALETTE.woodDark;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + roofH + 4, 5, 0, Math.PI * 1.4);
+    ctx.stroke();
+  } else if (opts.icon === 'forkKnife') {
+    ctx.strokeStyle = SCENE_PALETTE.woodDark;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2 - 5, y + roofH - 2);
+    ctx.lineTo(x + w / 2 - 5, y + roofH + 8);
+    ctx.moveTo(x + w / 2 + 5, y + roofH - 2);
+    ctx.lineTo(x + w / 2 + 5, y + roofH + 8);
+    ctx.stroke();
+  }
+}
+
+// Maps each country's landmark to a roof style + wall tint for the
+// decorative background buildings, so every level's city reads with a
+// distinct silhouette matching that country's capital-city aesthetic.
+const CITY_STYLE_BY_LANDMARK = {
+  toriiGate:         { roof: 'pagoda',  wall: SCENE_PALETTE.wall },
+  eiffelTower:       { roof: 'mansard', wall: SCENE_PALETTE.wall },
+  pyramid:           { roof: 'dome',    wall: SCENE_PALETTE.stone },
+  colosseum:         { roof: 'tile',    wall: SCENE_PALETTE.wallShade },
+  christRedeemer:    { roof: 'tile',    wall: SCENE_PALETTE.wall },
+  indiaGate:         { roof: 'dome',    wall: SCENE_PALETTE.wallShade },
+  angelIndependence: { roof: 'tile',    wall: SCENE_PALETTE.wall },
+  watArun:           { roof: 'pagoda',  wall: SCENE_PALETTE.stone },
+  hassanTower:       { roof: 'dome',    wall: SCENE_PALETTE.stone },
+  brandenburgGate:   { roof: 'mansard', wall: SCENE_PALETTE.wallShade },
+  gwanghwamunGate:   { roof: 'pagoda',  wall: SCENE_PALETTE.wallShade },
+  parthenon:         { roof: 'tile',    wall: SCENE_PALETTE.wall },
+  limaCathedral:     { roof: 'tile',    wall: SCENE_PALETTE.wall },
+  anitkabir:         { roof: 'dome',    wall: SCENE_PALETTE.stone },
+  kiccTower:         { roof: 'tile',    wall: SCENE_PALETTE.wallShade },
+  osloCityHall:      { roof: 'mansard', wall: SCENE_PALETTE.wallShade },
+  onePillarPagoda:   { roof: 'pagoda',  wall: SCENE_PALETTE.wall },
+  puertaAlcala:      { roof: 'tile',    wall: SCENE_PALETTE.wall },
+  beehive:           { roof: 'dome',    wall: SCENE_PALETTE.wallShade },
+  obelisco:          { roof: 'mansard', wall: SCENE_PALETTE.wall },
+  placeholder:       { roof: 'tile',    wall: SCENE_PALETTE.wall }
+};
+function getCityStyle(level) {
+  return CITY_STYLE_BY_LANDMARK[level.landmark] || CITY_STYLE_BY_LANDMARK.placeholder;
+}
+
+// Non-interactive scenery scattered across the world, purely for atmosphere
+// (never blocks movement or carries game logic). Positions are fixed and
+// reused every level; only the roof/wall style is re-themed per country.
+function drawDecorations(cityStyle) {
+  drawTree(40, 60, 0.9);
+  drawTree(900, 55, 0.8);
+  drawTree(1320, 830, 0.9);
+  drawTree(60, 840, 0.8);
+
+  drawCottage(150, 540, 70, 62, { roof: cityStyle.roof, wall: cityStyle.wall });
+  drawCottage(560, 470, 70, 62, { roof: cityStyle.roof, wall: cityStyle.wall });
+  drawCottage(900, 760, 70, 62, { roof: cityStyle.roof, wall: cityStyle.wall });
+  drawCottage(1180, 120, 70, 62, { roof: cityStyle.roof, wall: cityStyle.wall });
+
+  drawCottage(300, 110, 54, 46, {
+    roof: cityStyle.roof, wall: cityStyle.wall, door: false, window: true,
+    awning: true, awningColor: SCENE_PALETTE.roofTile, icon: 'cup'
+  }); // café
+
+  drawCottage(640, 800, 54, 46, {
+    roof: cityStyle.roof, wall: cityStyle.wall, door: false, window: true, icon: 'forkKnife'
+  }); // restaurant
+}
+
+// Simple wooden bench, drawn next to the landmark at the end of the map.
+function drawBench(x, y) {
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.fillRect(x, y, 5, 14);       // left backrest support
+  ctx.fillRect(x + 39, y, 5, 14);  // right backrest support
+  ctx.fillRect(x, y - 5, 44, 6);   // backrest
+  ctx.fillRect(x - 3, y + 14, 50, 7); // seat
+  ctx.fillRect(x + 2, y + 21, 5, 13); // front-left leg
+  ctx.fillRect(x + 37, y + 21, 5, 13); // front-right leg
+}
+
+// The country's capital landmark, drawn large at the far end of the map —
+// reuses the same glyph as the passport stamp (drawStampIcon), just scaled
+// way up, so each country's art is only ever authored once.
+function drawWorldLandmark(type, country) {
+  const pos = LAYOUT.landmarkPos;
+  ctx.save();
+  ctx.translate(pos.x, pos.y);
+  ctx.scale(6, 6);
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.strokeStyle = SCENE_PALETTE.woodDark;
+  ctx.lineWidth = 0.6;
+  drawStampIcon(type);
+  ctx.restore();
+
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.font = "bold 13px 'Segoe UI', Arial, sans-serif";
+  ctx.textAlign = 'center';
+  ctx.fillText(country.toUpperCase(), pos.x, pos.y + 145);
+}
+
+// Soft drop-shadow ellipse shared by both characters.
+function drawCharacterShadow(cx, groundY, rx) {
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = SCENE_PALETTE.stoneDark;
+  ctx.beginPath();
+  ctx.ellipse(cx, groundY, rx, rx * 0.35, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+// Original "adventurous kid" sprite: sun hat, rounded head with rosy
+// cheeks, backpack, shirt and shorts — rounded shapes, no sharp pixels.
+function drawPlayerCharacter(x, y, size) {
+  const cx = x + size / 2;
+  drawCharacterShadow(cx, y + size + 2, size * 0.45);
+
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.beginPath();
+  ctx.ellipse(cx - size * 0.32, y + size * 0.62, size * 0.16, size * 0.22, 0, 0, Math.PI * 2);
+  ctx.fill(); // backpack peeking out to the side
+
+  ctx.fillStyle = SCENE_PALETTE.stone;
+  drawRoundedRect(cx - size * 0.28, y + size * 0.62, size * 0.56, size * 0.3, size * 0.12);
+  ctx.fill(); // shorts
+
+  ctx.fillStyle = SCENE_PALETTE.leaves;
+  drawRoundedRect(cx - size * 0.3, y + size * 0.32, size * 0.6, size * 0.36, size * 0.16);
+  ctx.fill(); // short-sleeve shirt
+
+  ctx.fillStyle = SCENE_PALETTE.skin;
+  ctx.beginPath();
+  ctx.arc(cx, y + size * 0.28, size * 0.26, 0, Math.PI * 2);
+  ctx.fill(); // head
+
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = SCENE_PALETTE.roofTile; // rosy cheeks: existing color, just alpha-blended
+  ctx.beginPath();
+  ctx.arc(cx - size * 0.14, y + size * 0.32, size * 0.06, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx + size * 0.14, y + size * 0.32, size * 0.06, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = SCENE_PALETTE.roofThatch;
+  ctx.beginPath();
+  ctx.ellipse(cx, y + size * 0.12, size * 0.36, size * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill(); // hat brim
+  ctx.fillStyle = SCENE_PALETTE.roofThatchDark;
+  ctx.beginPath();
+  ctx.arc(cx, y + size * 0.06, size * 0.2, Math.PI, 0);
+  ctx.fill(); // hat crown
+}
+
+// Customs Officer NPC — same proportions as the player, simple uniform,
+// cap tinted in the level's accent so returning players spot it at a glance.
+function drawOfficerCharacter(x, y, size, capColor) {
+  const cx = x + size / 2;
+  drawCharacterShadow(cx, y + size + 2, size * 0.45);
+
+  ctx.fillStyle = UI_PALETTE.dark;
+  drawRoundedRect(cx - size * 0.3, y + size * 0.32, size * 0.6, size * 0.62, size * 0.14);
+  ctx.fill(); // jacket
+
+  ctx.fillStyle = SCENE_PALETTE.stone;
+  ctx.beginPath();
+  ctx.arc(cx + size * 0.12, y + size * 0.48, size * 0.05, 0, Math.PI * 2);
+  ctx.fill(); // badge
+
+  ctx.fillStyle = SCENE_PALETTE.skin;
+  ctx.beginPath();
+  ctx.arc(cx, y + size * 0.28, size * 0.26, 0, Math.PI * 2);
+  ctx.fill(); // head
+
+  ctx.fillStyle = capColor;
+  drawRoundedRect(cx - size * 0.28, y + size * 0.02, size * 0.56, size * 0.14, size * 0.06);
+  ctx.fill(); // cap brim
+  ctx.beginPath();
+  ctx.arc(cx, y + size * 0.04, size * 0.22, Math.PI, 0);
+  ctx.fill(); // cap crown
+}
+
+// Every disguised encounter slot renders as an identical wooden signpost —
+// no symbol or color gives away whether it secretly holds a clue or a
+// hazard; only engaging with it (Space/Z) reveals which.
+function drawSignpostSlot(tile) {
   const cx = tile.x + tile.w / 2;
   const cy = tile.y + tile.h / 2;
-  ctx.fillStyle = PALETTE.darkest;
+
+  ctx.fillStyle = SCENE_PALETTE.dirtEdge;
   ctx.beginPath();
-  ctx.arc(cx, cy - 14, 9, 0, Math.PI * 2); // head
+  ctx.ellipse(cx, tile.y + tile.h - 6, tile.w * 0.32, 7, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillRect(cx - 11, cy - 4, 22, 26);   // body
-  ctx.fillStyle = PALETTE.dark;
-  ctx.fillRect(cx - 11, cy - 4, 22, 6);    // collar band (same on every slot)
-}
 
-// Simple country-vibe background silhouette, built only from PALETTE
-// colors and canvas primitives (no images). Drawn behind everything else
-// so it reads as scenery, not another interactive object.
-function drawLandmark(type) {
-  ctx.save();
-  ctx.fillStyle = PALETTE.dark;
-  ctx.strokeStyle = PALETTE.dark;
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.fillRect(cx - 4, cy - 6, 8, tile.h / 2);
 
-  switch (type) {
-    case 'toriiGate': {
-      ctx.fillRect(170, 20, 14, 90);   // left post
-      ctx.fillRect(296, 20, 14, 90);   // right post
-      ctx.fillRect(160, 55, 160, 10);  // lower crossbeam
-      ctx.fillRect(140, 30, 200, 14);  // upper cap bar
-      break;
-    }
-    case 'eiffelTower': {
-      ctx.beginPath();
-      ctx.moveTo(240, 10);
-      ctx.lineTo(200, 112);
-      ctx.lineTo(280, 112);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = PALETTE.light; // cut a leg-gap notch out of the base
-      ctx.beginPath();
-      ctx.moveTo(240, 68);
-      ctx.lineTo(224, 112);
-      ctx.lineTo(256, 112);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    }
-    case 'pyramid': {
-      ctx.beginPath();
-      ctx.moveTo(240, 15);
-      ctx.lineTo(170, 116);
-      ctx.lineTo(310, 116);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(345, 34, 13, 0, Math.PI * 2); // sun
-      ctx.fill();
-      break;
-    }
-    case 'colosseum': {
-      for (let i = 0; i < 5; i++) {
-        const ax = 150 + i * 38;
-        ctx.fillStyle = PALETTE.dark;
-        ctx.fillRect(ax, 50, 28, 62);
-        ctx.fillStyle = PALETTE.light;
-        ctx.beginPath();
-        ctx.arc(ax + 14, 50, 12, Math.PI, 0);
-        ctx.fill();
-      }
-      break;
-    }
-    case 'christRedeemer': {
-      ctx.beginPath();
-      ctx.moveTo(150, 118);
-      ctx.lineTo(240, 55);
-      ctx.lineTo(330, 118);
-      ctx.closePath();
-      ctx.fill(); // hill
-      ctx.fillRect(236, 22, 8, 38);  // body
-      ctx.fillRect(206, 34, 68, 7);  // outstretched arms
-      ctx.beginPath();
-      ctx.arc(240, 16, 8, 0, Math.PI * 2); // head
-      ctx.fill();
-      break;
-    }
-    default: {
-      // Generic globe/flag placeholder for countries not yet authored
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(240, 62, 28, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.ellipse(240, 62, 28, 12, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(240, 34);
-      ctx.lineTo(240, 90);
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
+  ctx.fillStyle = SCENE_PALETTE.woodTrim;
+  ctx.strokeStyle = SCENE_PALETTE.woodDark;
+  ctx.lineWidth = 2;
+  drawRoundedRect(cx - tile.w * 0.32, cy - tile.h * 0.34, tile.w * 0.64, tile.h * 0.4, 5);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = SCENE_PALETTE.stoneDark;
+  ctx.beginPath();
+  ctx.arc(cx, cy - tile.h * 0.14, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
 }
 
 // Small simplified glyph per country, drawn centered at the origin so it
@@ -857,38 +1853,156 @@ function drawLandmark(type) {
 function drawStampIcon(type) {
   switch (type) {
     case 'toriiGate':
-      ctx.fillRect(-16, -18, 5, 30);
-      ctx.fillRect(11, -18, 5, 30);
-      ctx.fillRect(-22, -6, 44, 4);
-      ctx.fillRect(-26, -18, 52, 5);
+      ctx.fillRect(-17, -18, 8, 30);
+      ctx.fillRect(9, -18, 8, 30);
+      ctx.fillRect(-23, -6, 46, 7);
+      ctx.fillRect(-27, -18, 54, 8);
       break;
     case 'eiffelTower':
       ctx.beginPath();
       ctx.moveTo(0, -22);
-      ctx.lineTo(-14, 20);
-      ctx.lineTo(14, 20);
+      ctx.lineTo(-16, 20);
+      ctx.lineTo(16, 20);
       ctx.closePath();
       ctx.fill();
       break;
     case 'pyramid':
       ctx.beginPath();
       ctx.moveTo(0, -20);
-      ctx.lineTo(-20, 18);
-      ctx.lineTo(20, 18);
+      ctx.lineTo(-22, 18);
+      ctx.lineTo(22, 18);
       ctx.closePath();
       ctx.fill();
       break;
     case 'colosseum':
-      ctx.fillRect(-20, -6, 12, 24);
-      ctx.fillRect(-6, -6, 12, 24);
-      ctx.fillRect(8, -6, 12, 24);
+      ctx.fillRect(-21, -6, 14, 24);
+      ctx.fillRect(-7, -6, 14, 24);
+      ctx.fillRect(7, -6, 14, 24);
       break;
     case 'christRedeemer':
-      ctx.fillRect(-3, -18, 6, 22);
-      ctx.fillRect(-16, -6, 32, 5);
+      ctx.fillRect(-4, -18, 8, 22);
+      ctx.fillRect(-17, -6, 34, 8);
+      break;
+    case 'indiaGate': // India Gate, New Delhi
+      ctx.fillRect(-16, -22, 7, 36);
+      ctx.fillRect(9, -22, 7, 36);
+      ctx.fillRect(-20, -26, 40, 6);
+      ctx.beginPath();
+      ctx.arc(0, -26, 4, Math.PI, 0);
+      ctx.fill();
+      break;
+    case 'angelIndependence': // Angel of Independence, Mexico City
+      ctx.fillRect(-10, -4, 20, 8);
+      ctx.fillRect(-4, -24, 8, 24);
+      ctx.beginPath();
+      ctx.arc(0, -28, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-6, -28); ctx.lineTo(-16, -32); ctx.lineTo(-6, -24); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(6, -28); ctx.lineTo(16, -32); ctx.lineTo(6, -24); ctx.closePath(); ctx.fill();
+      break;
+    case 'watArun': // Wat Arun, Bangkok
+      ctx.beginPath();
+      ctx.moveTo(-18, 20); ctx.lineTo(18, 20); ctx.lineTo(12, 8); ctx.lineTo(-12, 8); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-12, 8); ctx.lineTo(12, 8); ctx.lineTo(7, -4); ctx.lineTo(-7, -4); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-7, -4); ctx.lineTo(7, -4); ctx.lineTo(0, -24); ctx.closePath(); ctx.fill();
+      break;
+    case 'hassanTower': // Hassan Tower, Rabat
+      ctx.fillRect(-9, -28, 18, 46);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-9, -8); ctx.lineTo(9, -8);
+      ctx.moveTo(-9, 4); ctx.lineTo(9, 4);
+      ctx.stroke();
+      break;
+    case 'brandenburgGate': // Brandenburg Gate, Berlin
+      for (let i = -18; i <= 18; i += 7.2) {
+        ctx.fillRect(i - 1.5, -10, 3, 26);
+      }
+      ctx.fillRect(-22, -16, 44, 6);
+      ctx.beginPath();
+      ctx.arc(0, -20, 5, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 'gwanghwamunGate': // Gwanghwamun Gate, Seoul
+      ctx.fillRect(-20, 4, 40, 14);
+      ctx.beginPath();
+      ctx.moveTo(-22, 4); ctx.lineTo(0, -10); ctx.lineTo(22, 4); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-14, -8); ctx.lineTo(0, -22); ctx.lineTo(14, -8); ctx.closePath(); ctx.fill();
+      break;
+    case 'parthenon': // Parthenon, Athens
+      ctx.fillRect(-22, 6, 44, 4);
+      for (let i = -18; i <= 18; i += 6) {
+        ctx.fillRect(i - 1.2, -10, 2.4, 16);
+      }
+      ctx.beginPath();
+      ctx.moveTo(-22, -10); ctx.lineTo(0, -22); ctx.lineTo(22, -10); ctx.closePath(); ctx.fill();
+      break;
+    case 'limaCathedral': // Cathedral of Lima
+      ctx.fillRect(-6, -14, 12, 30);
+      ctx.fillRect(-20, -6, 10, 22);
+      ctx.fillRect(10, -6, 10, 22);
+      ctx.beginPath();
+      ctx.moveTo(-20, -6); ctx.lineTo(-15, -16); ctx.lineTo(-10, -6); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(10, -6); ctx.lineTo(15, -16); ctx.lineTo(20, -6); ctx.closePath(); ctx.fill();
+      break;
+    case 'anitkabir': // Anıtkabir, Ankara
+      ctx.fillRect(-24, 10, 48, 6);
+      ctx.fillRect(-18, 2, 36, 8);
+      for (let i = -14; i <= 14; i += 7) {
+        ctx.fillRect(i - 1.2, -10, 2.4, 12);
+      }
+      ctx.fillRect(-18, -14, 36, 5);
+      break;
+    case 'kiccTower': // KICC Tower, Nairobi
+      ctx.fillRect(-6, -14, 12, 34);
+      ctx.beginPath();
+      ctx.ellipse(0, -16, 14, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(-1.5, -26, 3, 12);
+      break;
+    case 'osloCityHall': // Oslo City Hall
+      ctx.fillRect(-18, -10, 14, 30);
+      ctx.fillRect(4, -10, 14, 30);
+      ctx.beginPath();
+      ctx.moveTo(-18, -10); ctx.lineTo(-11, -20); ctx.lineTo(-4, -10); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(4, -10); ctx.lineTo(11, -20); ctx.lineTo(18, -10); ctx.closePath(); ctx.fill();
+      break;
+    case 'onePillarPagoda': // One Pillar Pagoda, Hanoi
+      ctx.fillRect(-2.5, -4, 5, 22);
+      ctx.beginPath();
+      ctx.ellipse(0, 18, 10, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(-14, -14, 28, 12);
+      ctx.beginPath();
+      ctx.moveTo(-18, -14); ctx.lineTo(0, -24); ctx.lineTo(18, -14); ctx.closePath(); ctx.fill();
+      break;
+    case 'puertaAlcala': // Puerta de Alcalá, Madrid
+      ctx.fillRect(-24, -6, 12, 26);
+      ctx.fillRect(12, -6, 12, 26);
+      ctx.fillRect(-9, -14, 18, 34);
+      ctx.fillRect(-26, -18, 52, 6);
+      break;
+    case 'beehive': // Beehive (NZ Parliament), Wellington
+      ctx.beginPath();
+      ctx.moveTo(-6, 14); ctx.lineTo(-16, -14); ctx.lineTo(16, -14); ctx.lineTo(6, 14); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(0, -14, 16, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 'obelisco': // Obelisco de Buenos Aires
+      ctx.fillRect(-6, -20, 12, 40);
+      ctx.beginPath();
+      ctx.moveTo(-6, -20); ctx.lineTo(0, -30); ctx.lineTo(6, -20); ctx.closePath(); ctx.fill();
       break;
     default:
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 5;
       ctx.beginPath();
       ctx.arc(0, -2, 14, 0, Math.PI * 2);
       ctx.stroke();
@@ -911,44 +2025,56 @@ function drawStampAnimation(elapsed) {
     alpha = 1 - t; // clears from the screen
   }
 
-  const radius = 70;
+  const radius = 74;
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
   ctx.translate(canvas.width / 2, canvas.height / 2 - 10);
   ctx.rotate(-0.12); // slight tilt, like a hand-stamped mark
   ctx.scale(scale, scale);
 
-  ctx.strokeStyle = currentLevel.accent;
-  ctx.lineWidth = 6;
+  // Stamp ink is always SCENE_PALETTE.woodDark (a real ink stamp is one
+  // color) so it reliably contrasts against the cream page background,
+  // regardless of which color a given country picked as its accent.
+  ctx.strokeStyle = SCENE_PALETTE.woodDark;
+  ctx.lineWidth = 11;
   ctx.beginPath();
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 6;
   ctx.beginPath();
-  ctx.arc(0, 0, radius - 8, 0, Math.PI * 2);
+  ctx.arc(0, 0, radius - 14, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.fillStyle = currentLevel.accent;
+  // thin accent-colored ring nested between the two ink bands — country
+  // flavor without depending on the accent for legibility
   ctx.strokeStyle = currentLevel.accent;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius - 7, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.strokeStyle = SCENE_PALETTE.woodDark;
+  ctx.lineWidth = 5;
   drawStampIcon(currentLevel.landmark);
 
-  ctx.font = 'bold 12px Courier New';
+  ctx.font = "bold 15px 'Segoe UI', Arial, sans-serif";
   ctx.textAlign = 'center';
-  ctx.fillText(currentLevel.country.toUpperCase(), 0, radius - 16);
-  ctx.font = 'bold 9px Courier New';
-  ctx.fillText('PASSPORT CONTROL', 0, -radius + 20);
+  ctx.fillText(currentLevel.country.toUpperCase(), 0, radius - 20);
+  ctx.font = "bold 11px 'Segoe UI', Arial, sans-serif";
+  ctx.fillText('PASSPORT CONTROL', 0, -radius + 24);
   ctx.restore();
 
   ctx.globalAlpha = 1;
-  ctx.fillStyle = PALETTE.darkest;
-  ctx.font = 'bold 13px Courier New';
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.font = "bold 13px 'Segoe UI', Arial, sans-serif";
   ctx.textAlign = 'center';
   ctx.fillText(transitionCaption, canvas.width / 2, canvas.height - 40);
 }
 
-// Simple blocky airplane silhouette, GB style, drawn centered at the origin.
+// Simple rounded airplane silhouette, drawn centered at the origin.
 function drawPlaneShape() {
-  ctx.fillStyle = PALETTE.dark;
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
   ctx.fillRect(-30, -4, 60, 8); // fuselage
   ctx.beginPath(); // nose
   ctx.moveTo(30, -4);
@@ -974,25 +2100,32 @@ function drawPlaneShape() {
   ctx.lineTo(4, 4);
   ctx.closePath();
   ctx.fill();
+  ctx.fillStyle = SCENE_PALETTE.wall;
+  ctx.beginPath();
+  ctx.arc(8, 0, 3, 0, Math.PI * 2); // little cabin window
+  ctx.fill();
 }
 
 // Airplane flies across the screen on a gentle arc before the next level loads.
+const PLANE_SCALE = 1.8; // bigger, more prominent silhouette
+
 function drawPlaneAnimation(elapsed) {
   const t = Math.max(0, Math.min(1, elapsed / PLANE_MS));
-  const startX = -60;
-  const endX = canvas.width + 60;
+  const startX = -90;
+  const endX = canvas.width + 90;
   const x = startX + (endX - startX) * t;
   const y = 140 - Math.sin(t * Math.PI) * 30;
 
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-0.15);
+  ctx.scale(PLANE_SCALE, PLANE_SCALE);
   drawPlaneShape();
   ctx.restore();
 
-  const nextCountry = LEVELS[(transitionNextLevelIdx - 1) % LEVELS.length].country;
-  ctx.fillStyle = PALETTE.darkest;
-  ctx.font = 'bold 13px Courier New';
+  const nextCountry = LEVELS[transitionNextCountryIdx].country;
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.font = "bold 13px 'Segoe UI', Arial, sans-serif";
   ctx.textAlign = 'center';
   ctx.fillText(`Next stop: ${nextCountry}`, canvas.width / 2, canvas.height / 2 + 70);
 }
@@ -1004,9 +2137,9 @@ function drawPlaneAnimation(elapsed) {
 function renderTransition() {
   const elapsed = performance.now() - transitionStartTime;
 
-  ctx.fillStyle = PALETTE.lightest;
+  ctx.fillStyle = SCENE_PALETTE.wall;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = currentLevel.accent;
+  ctx.strokeStyle = SCENE_PALETTE.woodDark; // always contrasts against the page bg, unlike a per-country accent
   ctx.lineWidth = 6;
   ctx.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
 
@@ -1023,34 +2156,40 @@ function render() {
     return;
   }
 
-  // Background
-  ctx.fillStyle = PALETTE.light;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const cityStyle = getCityStyle(currentLevel);
 
-  // Accent border frame representing current country theme
-  ctx.strokeStyle = currentLevel.accent;
-  ctx.lineWidth = 6;
-  ctx.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
+  // Everything below is drawn in WORLD coordinates; translating by the
+  // camera offset is what makes the viewport scroll as the player wanders.
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
 
-  // Country-vibe background scenery (behind the interactive layer)
-  drawLandmark(currentLevel.landmark);
+  drawFloor();
+  drawHedgeBorder();
+  drawDecorations(cityStyle);
 
   // Disguised encounter slots — identical appearance whether they hold
   // a clue or a hazard; content only revealed after engaging with them.
-  SLOT_KEYS.forEach((slotKey) => drawEncounterSlot(LAYOUT[slotKey]));
+  SLOT_KEYS.forEach((slotKey) => drawSignpostSlot(LAYOUT[slotKey]));
 
-  // Officer / exit gate (accent colored, always recognizable — not disguised)
-  drawTile(LAYOUT.officer, 'C', currentLevel.accent, PALETTE.darkest);
-  ctx.fillStyle = PALETTE.darkest;
-  ctx.font = 'bold 10px Courier New';
+  // The far end of the map: the country's capital landmark, a bench, and
+  // the customs officer (accent-tinted cap) who administers the quiz.
+  drawWorldLandmark(currentLevel.landmark, currentLevel.country);
+  drawBench(LAYOUT.benchPos.x, LAYOUT.benchPos.y);
+  drawOfficerCharacter(
+    LAYOUT.officer.x + LAYOUT.officer.w / 2 - 12,
+    LAYOUT.officer.y + LAYOUT.officer.h - 34,
+    24,
+    currentLevel.accent
+  );
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.font = "bold 11px 'Segoe UI', Arial, sans-serif";
   ctx.textAlign = 'center';
-  ctx.fillText('CUSTOMS', LAYOUT.officer.x + LAYOUT.officer.w / 2, LAYOUT.officer.y + LAYOUT.officer.h + 10);
+  ctx.fillText('CUSTOMS', LAYOUT.officer.x + LAYOUT.officer.w / 2, LAYOUT.officer.y + LAYOUT.officer.h + 30);
 
   // Player
-  ctx.fillStyle = PALETTE.darkest;
-  ctx.fillRect(player.x, player.y, PLAYER_SIZE, PLAYER_SIZE);
-  ctx.fillStyle = currentLevel.accent;
-  ctx.fillRect(player.x + 4, player.y + 4, PLAYER_SIZE - 8, PLAYER_SIZE - 8);
+  drawPlayerCharacter(player.x, player.y, PLAYER_SIZE);
+
+  ctx.restore();
 }
 
 function gameLoop() {
@@ -1062,7 +2201,7 @@ function gameLoop() {
 /* ---------------------------------------------------------------------
    Boot
 --------------------------------------------------------------------- */
-loadLevel(1);
+loadLevel(1, 0); // default Japan behind the title screen until Start is pressed
 gameLoop();
 </script>
 </body>
