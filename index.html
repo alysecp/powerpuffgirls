@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="googlebot" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Passport Panic</title>
+<title>WANDERSTAMP</title>
 <style>
   /* ===================== CLIENT / UI LAYER (styling) =====================
      Every screen EXCEPT the game map (the canvas — see SCENE_PALETTE in the
@@ -192,6 +192,35 @@
     font-size: 18px;
   }
   .modalBox p { font-size: 13px; margin: 8px 0 14px 0; }
+  /* WANDERSTAMP wordmark: bold chunky monospace lettering, tilted like a
+     hand-stamped impression, with a layered ink-bleed shadow for texture. */
+  .gameTitle {
+    font-family: 'Courier New', monospace;
+    font-weight: 900;
+    font-size: 30px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+    color: var(--ui-darkest);
+    transform: rotate(-2deg);
+    text-shadow:
+      1.5px 0 0 rgba(36, 18, 66, 0.35),
+      -1.5px 0 0 rgba(36, 18, 66, 0.2),
+      0 1.5px 0 rgba(36, 18, 66, 0.35),
+      0 -1.5px 0 rgba(36, 18, 66, 0.2);
+  }
+  /* Slogan: smaller stamped/typewriter caption, like ink pressed into a
+     passport page — sits at the bottom of the title screen. */
+  .gameSlogan {
+    font-family: 'Courier New', monospace;
+    font-style: italic;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    margin: 14px 0 0;
+    color: var(--ui-darkest);
+    opacity: 0.7;
+    text-shadow: 0.5px 0.5px 0 rgba(36, 18, 66, 0.3);
+  }
   .rulesList { text-align: left; margin: 10px 0; padding: 0 4px; }
   .rulesList p { margin: 6px 0; font-size: 12.5px; }
   .rulesList .arrow { margin-right: 4px; }
@@ -304,7 +333,7 @@
 <!-- ===================== CLIENT / UI: Title Screen ===================== -->
 <div id="titleScreen" class="modalOverlay hidden">
   <div class="modalBox">
-    <h2>Passport Panic</h2>
+    <h2 class="gameTitle">WANDERSTAMP</h2>
     <div class="rulesList">
       <p><span class="arrow">▸</span>Wander the city to find clues and street situations.</p>
       <p><span class="arrow">▸</span>Wrong calls cost Vibe — costs rise per level.</p>
@@ -316,6 +345,7 @@
       Interact: Space / Z (or on-screen buttons)
     </div>
     <button id="startBtn">Start Journey</button>
+    <p class="gameSlogan">Empty passport, world awaits — got the vibe to fill it?</p>
   </div>
 </div>
 
@@ -368,7 +398,7 @@
 
 <script>
 /* =====================================================================
-   PASSPORT PANIC — GB-Style Cultural Customs Game
+   WANDERSTAMP — Cultural Customs Game
    Single self-contained file. Vanilla JS + Canvas2D (no build step).
 
    Architecture (per project conventions):
@@ -403,7 +433,9 @@ const SCENE_PALETTE = {
   roofThatch: '#D9A85C', roofThatchDark: '#B98A46',
   leaves: '#5A9A3C', leavesDark: '#3F7A28',
   stone: '#B9B0A2', stoneDark: '#8F877A',
-  skin: '#F2C29A'
+  skin: '#F2C29A',
+  // Added for map landscaping (rivers) — no existing color reads as water.
+  water: '#6FA8B5', waterDark: '#4F8896'
 };
 // Accent rotation pool used by LEVELS (index % 4) — tints one distinctive
 // element per level (customs-house flag, officer's cap) so returning
@@ -1984,9 +2016,17 @@ function drawDecorations(cityStyle) {
   drawTree(900, 55, 0.8);
   drawTree(1320, 830, 0.9);
   drawTree(60, 840, 0.8);
+  drawTree(480, 60, 0.7);
+  drawTree(850, 830, 0.8);
+  drawTree(1500, 200, 0.75);
+  drawTree(120, 300, 0.7);
+  drawTree(1050, 850, 0.7);
+  drawTree(550, 850, 0.65);
 
   drawCottage(150, 540, 64, 56, { roof: cityStyle.roof, wall: cityStyle.wall });
   drawCottage(1180, 120, 64, 56, { roof: cityStyle.roof, wall: cityStyle.wall });
+
+  FLOWER_SPOTS.forEach((p) => drawFlowerPatch(p.x, p.y));
 }
 
 // Simple wooden bench, drawn next to the landmark at the end of the map.
@@ -2143,26 +2183,130 @@ function drawSignpostSlot(tile) {
   ctx.globalAlpha = 1;
 }
 
-// Section 4: a visible stone path with a dashed centerline, connecting the
-// entry point through every building/sign to the landmark — so the map
-// reads clearly without needing instructions. Same waypoints every level.
+// Builds a smoothed path through a list of waypoints using quadratic
+// curves through each pair's midpoint — turns sharp zigzag joints into one
+// flowing curve. Caller still does ctx.stroke(); reused by the guiding
+// path and the river below so both read as flowing, not angular.
+function tracePath(points) {
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length - 1; i++) {
+    const midX = (points[i].x + points[i + 1].x) / 2;
+    const midY = (points[i].y + points[i + 1].y) / 2;
+    ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+  }
+  const last = points[points.length - 1];
+  const secondLast = points[points.length - 2];
+  ctx.quadraticCurveTo(secondLast.x, secondLast.y, last.x, last.y);
+}
+
+// Section 4/landscaping: a flowing stone path with a dashed centerline,
+// connecting the entry point through every building/sign to the landmark
+// — so the map reads clearly without needing instructions. Same
+// waypoints every level; curved (not angular) via tracePath().
 function drawGuidingPath() {
-  ctx.strokeStyle = SCENE_PALETTE.stone;
-  ctx.lineWidth = 22;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.beginPath();
-  PATH_WAYPOINTS.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+
+  ctx.strokeStyle = SCENE_PALETTE.stone;
+  ctx.lineWidth = 22;
+  tracePath(PATH_WAYPOINTS);
   ctx.stroke();
 
   ctx.strokeStyle = SCENE_PALETTE.wallShade;
   ctx.lineWidth = 3;
   ctx.setLineDash([14, 14]);
-  ctx.beginPath();
-  PATH_WAYPOINTS.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  tracePath(PATH_WAYPOINTS);
   ctx.stroke();
   ctx.setLineDash([]);
 }
+
+// Landscaping: a winding river crossing the map, drawn with the same
+// flowing-curve technique as the guiding path. Purely decorative (no
+// collision), like every other background feature.
+const RIVER_WAYPOINTS = [
+  { x: 220, y: -20 },
+  { x: 340, y: 220 },
+  { x: 230, y: 430 },
+  { x: 380, y: 640 },
+  { x: 300, y: 920 }
+];
+
+function drawRiver() {
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.strokeStyle = SCENE_PALETTE.waterDark;
+  ctx.lineWidth = 46;
+  tracePath(RIVER_WAYPOINTS);
+  ctx.stroke();
+
+  ctx.strokeStyle = SCENE_PALETTE.water;
+  ctx.lineWidth = 38;
+  tracePath(RIVER_WAYPOINTS);
+  ctx.stroke();
+
+  // shimmer highlight
+  ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = SCENE_PALETTE.wall;
+  ctx.lineWidth = 3;
+  ctx.setLineDash([10, 16]);
+  tracePath(RIVER_WAYPOINTS);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+}
+
+// A small wooden bridge where the guiding path crosses the river.
+function drawBridge(x, y, angle) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = SCENE_PALETTE.woodTrim;
+  ctx.strokeStyle = SCENE_PALETTE.woodDark;
+  ctx.lineWidth = 2;
+  ctx.fillRect(-40, -10, 80, 20);
+  ctx.strokeRect(-40, -10, 80, 20);
+  ctx.lineWidth = 1;
+  for (let i = -30; i <= 30; i += 10) {
+    ctx.beginPath();
+    ctx.moveTo(i, -10);
+    ctx.lineTo(i, 10);
+    ctx.stroke();
+  }
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
+  ctx.fillRect(-40, -13, 80, 3);
+  ctx.fillRect(-40, 10, 80, 3);
+  ctx.restore();
+}
+
+// Landscaping: a small cluster of simple 4-petal flowers, reusing existing
+// palette colors (roof tile/thatch) as petals — no new colors needed.
+function drawFlowerPatch(x, y) {
+  const petalColors = [SCENE_PALETTE.roofTile, SCENE_PALETTE.roofThatch];
+  for (let i = 0; i < 3; i++) {
+    const fx = x + (i - 1) * 10;
+    const fy = y + (i % 2) * 6;
+    ctx.fillStyle = petalColors[i % petalColors.length];
+    for (let p = 0; p < 4; p++) {
+      const a = (p / 4) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(fx + Math.cos(a) * 3, fy + Math.sin(a) * 3, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = SCENE_PALETTE.roofThatchDark;
+    ctx.beginPath();
+    ctx.arc(fx, fy, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Fixed flower positions, scattered once at load (like PATH_SPECKLES) so
+// they stay put frame to frame.
+const FLOWER_SPOTS = Array.from({ length: 36 }, () => ({
+  x: 30 + Math.random() * (WORLD_WIDTH - 60),
+  y: 30 + Math.random() * (WORLD_HEIGHT - 60)
+}));
 
 // Section 4: every interactive object gets the same "you can engage here"
 // affordance — a soft pulsing glow at its base plus a small bouncing
@@ -2582,7 +2726,9 @@ function render() {
   ctx.translate(-camera.x, -camera.y);
 
   drawFloor(currentLevel.accent, cityStyle.ground);
+  drawRiver();
   drawGuidingPath();
+  drawBridge(285, 325, 0.48); // where the guiding path crosses the river
   drawHedgeBorder();
   drawDecorations(cityStyle);
 
