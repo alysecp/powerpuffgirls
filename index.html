@@ -153,8 +153,11 @@
   <!-- ===================== CLIENT / UI: HUD ===================== -->
   <div id="hud">
     <span id="hudCountry">Country: Japan</span>
+    <span>|</span>
     <span id="hudRisk">Risk: 0%</span>
+    <span>|</span>
     <span id="hudStamps">Stamps: 0</span>
+    <span>|</span>
     <span id="hudLevel">Level: 1</span>
   </div>
 
@@ -231,13 +234,16 @@ const RISK_MAX = 100;
    DATA LAYER: all 20 country levels in fixed rotation order.
    Levels 1-5 are fully authored with real cultural facts + quizzes.
    Levels 6-20 are placeholders (same structure/behavior, swap-in-ready).
-   Each level: { country, accent, clue1, clue2, quiz: [ {q, options:[a,b], correct}, ... ] }
+   `landmark` picks a simple background silhouette drawn in drawLandmark()
+   below, using only PALETTE colors, to give each map its country "vibe".
+   Each level: { country, accent, landmark, clue1, clue2, quiz: [ {q, options:[a,b], correct}, ... ] }
 --------------------------------------------------------------------- */
 const LEVELS = [
   // 1 - JAPAN (built)
   {
     country: "Japan",
     accent: ACCENT_POOL[0 % 4],
+    landmark: "toriiGate",
     clue1: "In Japan, it's customary to remove your shoes before entering someone's home.",
     clue2: "Bowing is a traditional greeting in Japan, often used in place of handshakes in formal situations.",
     quiz: [
@@ -249,6 +255,7 @@ const LEVELS = [
   {
     country: "France",
     accent: ACCENT_POOL[1 % 4],
+    landmark: "eiffelTower",
     clue1: "In France, it's polite to greet shopkeepers with 'Bonjour' before starting any conversation.",
     clue2: "Bread such as a baguette is traditionally placed directly on the table, not on a separate plate.",
     quiz: [
@@ -260,6 +267,7 @@ const LEVELS = [
   {
     country: "Egypt",
     accent: ACCENT_POOL[2 % 4],
+    landmark: "pyramid",
     clue1: "In Egypt, it's customary to accept tea or coffee when offered as a guest, since declining can seem impolite.",
     clue2: "Many people in Egypt eat and pass food with the right hand, as the left hand is traditionally seen as unclean.",
     quiz: [
@@ -271,6 +279,7 @@ const LEVELS = [
   {
     country: "Italy",
     accent: ACCENT_POOL[3 % 4],
+    landmark: "colosseum",
     clue1: "In Italy, cappuccino is traditionally a breakfast drink and is rarely ordered after 11am or with a meal.",
     clue2: "During meals in Italy, it's considered polite to keep your hands visible above the table, not in your lap.",
     quiz: [
@@ -282,6 +291,7 @@ const LEVELS = [
   {
     country: "Brazil",
     accent: ACCENT_POOL[4 % 4],
+    landmark: "christRedeemer",
     clue1: "In Brazil, greetings often include a kiss on the cheek, and the number of kisses can vary by region.",
     clue2: "The 'thumbs up' gesture is commonly used in Brazil to mean 'okay' or 'great'.",
     quiz: [
@@ -290,63 +300,63 @@ const LEVELS = [
     ]
   },
   // 6-20 - PLACEHOLDERS (same structure & flow; swap real content in later)
-  { country: "India",        accent: ACCENT_POOL[5 % 4],  clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "India",        accent: ACCENT_POOL[5 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Mexico",       accent: ACCENT_POOL[6 % 4],  clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Mexico",       accent: ACCENT_POOL[6 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Thailand",     accent: ACCENT_POOL[7 % 4],  clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Thailand",     accent: ACCENT_POOL[7 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Morocco",      accent: ACCENT_POOL[8 % 4],  clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Morocco",      accent: ACCENT_POOL[8 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Germany",      accent: ACCENT_POOL[9 % 4],  clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Germany",      accent: ACCENT_POOL[9 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "South Korea",  accent: ACCENT_POOL[10 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "South Korea",  accent: ACCENT_POOL[10 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Greece",       accent: ACCENT_POOL[11 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Greece",       accent: ACCENT_POOL[11 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Peru",         accent: ACCENT_POOL[12 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Peru",         accent: ACCENT_POOL[12 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Turkey",       accent: ACCENT_POOL[13 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Turkey",       accent: ACCENT_POOL[13 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Kenya",        accent: ACCENT_POOL[14 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Kenya",        accent: ACCENT_POOL[14 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Norway",       accent: ACCENT_POOL[15 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Norway",       accent: ACCENT_POOL[15 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Vietnam",      accent: ACCENT_POOL[16 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Vietnam",      accent: ACCENT_POOL[16 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Spain",        accent: ACCENT_POOL[17 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Spain",        accent: ACCENT_POOL[17 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "New Zealand",  accent: ACCENT_POOL[18 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "New Zealand",  accent: ACCENT_POOL[18 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Argentina",    accent: ACCENT_POOL[19 % 4], clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Argentina",    accent: ACCENT_POOL[19 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]}
@@ -355,18 +365,36 @@ const LEVELS = [
 /* ---------------------------------------------------------------------
    DATA LAYER: fixed single-screen tile layout (re-used by every level;
    never regenerated). Coordinates are canvas pixels (480x360 internal).
+
+   Disguise design: the 4 physical slot positions below are always the
+   same, and every slot is drawn as an identical "local" sprite (see
+   drawEncounterSlot) — there is no visual tell for which slots hold a
+   helpful clue vs. a harmful hazard. ENCOUNTER_PATTERNS assigns which
+   of the level's clue1/clue2/hazard1/hazard2 content lives in which
+   physical slot, statically per level (not randomized at runtime), so
+   the same screen position isn't safe/dangerous every single level.
 --------------------------------------------------------------------- */
 const PLAYER_START = { x: 210, y: 300 };
 const PLAYER_SIZE = 28;
 
 const TILE_SIZE = 60;
 const LAYOUT = {
-  officer:  { x: 200, y: 26,  w: 80, h: 50, type: "officer" },
-  clue1:    { x: 36,  y: 138, w: TILE_SIZE, h: TILE_SIZE, type: "clue" },
-  clue2:    { x: 384, y: 138, w: TILE_SIZE, h: TILE_SIZE, type: "clue" },
-  hazard1:  { x: 36,  y: 262, w: TILE_SIZE, h: TILE_SIZE, type: "hazard" },
-  hazard2:  { x: 384, y: 262, w: TILE_SIZE, h: TILE_SIZE, type: "hazard" }
+  officer: { x: 200, y: 26,  w: 80, h: 50 },
+  slotTL:  { x: 36,  y: 138, w: TILE_SIZE, h: TILE_SIZE },
+  slotTR:  { x: 384, y: 138, w: TILE_SIZE, h: TILE_SIZE },
+  slotBL:  { x: 36,  y: 262, w: TILE_SIZE, h: TILE_SIZE },
+  slotBR:  { x: 384, y: 262, w: TILE_SIZE, h: TILE_SIZE }
 };
+const SLOT_KEYS = ['slotTL', 'slotTR', 'slotBL', 'slotBR'];
+
+// Each entry maps content keys onto [slotTL, slotTR, slotBL, slotBR], in some order.
+// Every permutation contains exactly clue1, clue2, hazard1, hazard2 once each.
+const ENCOUNTER_PATTERNS = [
+  ['clue1',   'hazard1', 'hazard2', 'clue2'],
+  ['hazard1', 'clue2',   'clue1',   'hazard2'],
+  ['clue2',   'hazard2', 'clue1',   'hazard1'],
+  ['hazard2', 'clue1',   'hazard1', 'clue2']
+];
 
 /* =====================================================================
    LOGIC / MIDDLEWARE LAYER
@@ -380,7 +408,8 @@ let currentLevel = LEVELS[(levelIndex - 1) % LEVELS.length];
 
 // ---- Per-level transient state ----
 let player = { x: PLAYER_START.x, y: PLAYER_START.y };
-let hazardVisited = { hazard1: false, hazard2: false }; // reset each level load & when player leaves the tile
+// Which content key (clue1/clue2/hazard1/hazard2) currently backs each physical slot
+let slotAssignment = {};
 
 // ---- Finite state machine: 'playing' | 'dialog' | 'quiz' | 'gameover' ----
 let gameState = 'playing';
@@ -435,7 +464,12 @@ function loadLevel(idx) {
   currentLevel = LEVELS[(levelIndex - 1) % LEVELS.length];
   player.x = PLAYER_START.x;
   player.y = PLAYER_START.y;
-  hazardVisited = { hazard1: false, hazard2: false };
+
+  // Assign this level's disguised content to the fixed physical slots
+  const pattern = ENCOUNTER_PATTERNS[(levelIndex - 1) % ENCOUNTER_PATTERNS.length];
+  slotAssignment = {};
+  SLOT_KEYS.forEach((slotKey, i) => { slotAssignment[slotKey] = pattern[i]; });
+
   updateHUD();
 }
 
@@ -473,10 +507,11 @@ function triggerHazard() {
   riskMeter = Math.min(RISK_MAX, riskMeter + dmg);
   flashRed();
   updateHUD();
+  const message = `That "local" was actually a scammer! The misstep costs you ${dmg}% Risk.`;
   if (riskMeter >= RISK_MAX) {
-    showDialog(`OUCH! A cultural misstep cost you ${dmg}% Risk!`, () => triggerGameOver());
+    showDialog(message, () => triggerGameOver());
   } else {
-    showDialog(`OUCH! A cultural misstep cost you ${dmg}% Risk!`);
+    showDialog(message);
   }
 }
 
@@ -582,18 +617,27 @@ function handleInteract() {
     openQuiz();
     return;
   }
-  if (rectsOverlap(pRect, LAYOUT.clue1)) {
-    showDialog(currentLevel.clue1);
-    return;
-  }
-  if (rectsOverlap(pRect, LAYOUT.clue2)) {
-    showDialog(currentLevel.clue2);
-    return;
+
+  // Disguised encounter slots: every slot looks identical, so the only way
+  // to learn whether it's a helpful clue or a harmful hazard is to engage.
+  for (const slotKey of SLOT_KEYS) {
+    if (rectsOverlap(pRect, LAYOUT[slotKey])) {
+      const contentKey = slotAssignment[slotKey];
+      if (contentKey.startsWith('clue')) {
+        showDialog(`A friendly local shares a tip: "${currentLevel[contentKey]}"`);
+      } else {
+        triggerHazard();
+      }
+      return;
+    }
   }
 }
 
 /* ---------------------------------------------------------------------
-   Update loop: movement + automatic hazard detection
+   Update loop: player movement only. Encounter slots are disguised, so
+   nothing is revealed just by walking near/onto one — the player must
+   deliberately engage (Space/Z) via handleInteract() to find out
+   whether a given slot is a helpful clue or a harmful hazard.
 --------------------------------------------------------------------- */
 const SPEED = 3;
 
@@ -609,18 +653,6 @@ function update() {
 
     player.x = Math.max(4, Math.min(canvas.width - PLAYER_SIZE - 4, player.x + dx * SPEED));
     player.y = Math.max(4, Math.min(canvas.height - PLAYER_SIZE - 4, player.y + dy * SPEED));
-
-    // Automatic hazard trigger on overlap (stepping onto the tile)
-    const pRect = playerRect();
-    ['hazard1', 'hazard2'].forEach((key) => {
-      const overlapping = rectsOverlap(pRect, LAYOUT[key]);
-      if (overlapping && !hazardVisited[key]) {
-        hazardVisited[key] = true;
-        triggerHazard();
-      } else if (!overlapping) {
-        hazardVisited[key] = false;
-      }
-    });
   }
 }
 
@@ -640,6 +672,115 @@ function drawTile(tile, label, fillColor, textColor) {
   ctx.fillText(label, tile.x + tile.w / 2, tile.y + tile.h / 2 + 2);
 }
 
+// Every disguised encounter slot renders identically (a simple "local"
+// silhouette) regardless of whether it secretly holds a clue or a hazard —
+// the look never gives away which is which; only engaging (Space/Z) does.
+function drawEncounterSlot(tile) {
+  ctx.fillStyle = PALETTE.lightest;
+  ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+  ctx.strokeStyle = PALETTE.darkest;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(tile.x, tile.y, tile.w, tile.h);
+
+  const cx = tile.x + tile.w / 2;
+  const cy = tile.y + tile.h / 2;
+  ctx.fillStyle = PALETTE.darkest;
+  ctx.beginPath();
+  ctx.arc(cx, cy - 14, 9, 0, Math.PI * 2); // head
+  ctx.fill();
+  ctx.fillRect(cx - 11, cy - 4, 22, 26);   // body
+  ctx.fillStyle = PALETTE.dark;
+  ctx.fillRect(cx - 11, cy - 4, 22, 6);    // collar band (same on every slot)
+}
+
+// Simple country-vibe background silhouette, built only from PALETTE
+// colors and canvas primitives (no images). Drawn behind everything else
+// so it reads as scenery, not another interactive object.
+function drawLandmark(type) {
+  ctx.save();
+  ctx.fillStyle = PALETTE.dark;
+  ctx.strokeStyle = PALETTE.dark;
+
+  switch (type) {
+    case 'toriiGate': {
+      ctx.fillRect(170, 20, 14, 90);   // left post
+      ctx.fillRect(296, 20, 14, 90);   // right post
+      ctx.fillRect(160, 55, 160, 10);  // lower crossbeam
+      ctx.fillRect(140, 30, 200, 14);  // upper cap bar
+      break;
+    }
+    case 'eiffelTower': {
+      ctx.beginPath();
+      ctx.moveTo(240, 10);
+      ctx.lineTo(200, 112);
+      ctx.lineTo(280, 112);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = PALETTE.light; // cut a leg-gap notch out of the base
+      ctx.beginPath();
+      ctx.moveTo(240, 68);
+      ctx.lineTo(224, 112);
+      ctx.lineTo(256, 112);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case 'pyramid': {
+      ctx.beginPath();
+      ctx.moveTo(240, 15);
+      ctx.lineTo(170, 116);
+      ctx.lineTo(310, 116);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(345, 34, 13, 0, Math.PI * 2); // sun
+      ctx.fill();
+      break;
+    }
+    case 'colosseum': {
+      for (let i = 0; i < 5; i++) {
+        const ax = 150 + i * 38;
+        ctx.fillStyle = PALETTE.dark;
+        ctx.fillRect(ax, 50, 28, 62);
+        ctx.fillStyle = PALETTE.light;
+        ctx.beginPath();
+        ctx.arc(ax + 14, 50, 12, Math.PI, 0);
+        ctx.fill();
+      }
+      break;
+    }
+    case 'christRedeemer': {
+      ctx.beginPath();
+      ctx.moveTo(150, 118);
+      ctx.lineTo(240, 55);
+      ctx.lineTo(330, 118);
+      ctx.closePath();
+      ctx.fill(); // hill
+      ctx.fillRect(236, 22, 8, 38);  // body
+      ctx.fillRect(206, 34, 68, 7);  // outstretched arms
+      ctx.beginPath();
+      ctx.arc(240, 16, 8, 0, Math.PI * 2); // head
+      ctx.fill();
+      break;
+    }
+    default: {
+      // Generic globe/flag placeholder for countries not yet authored
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(240, 62, 28, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(240, 62, 28, 12, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(240, 34);
+      ctx.lineTo(240, 90);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 function render() {
   // Background
   ctx.fillStyle = PALETTE.light;
@@ -650,18 +791,18 @@ function render() {
   ctx.lineWidth = 6;
   ctx.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
 
-  // Clue tiles
-  drawTile(LAYOUT.clue1, '?', PALETTE.lightest, PALETTE.darkest);
-  drawTile(LAYOUT.clue2, '?', PALETTE.lightest, PALETTE.darkest);
+  // Country-vibe background scenery (behind the interactive layer)
+  drawLandmark(currentLevel.landmark);
 
-  // Hazard tiles
-  drawTile(LAYOUT.hazard1, '!', PALETTE.darkest, PALETTE.lightest);
-  drawTile(LAYOUT.hazard2, '!', PALETTE.darkest, PALETTE.lightest);
+  // Disguised encounter slots — identical appearance whether they hold
+  // a clue or a hazard; content only revealed after engaging with them.
+  SLOT_KEYS.forEach((slotKey) => drawEncounterSlot(LAYOUT[slotKey]));
 
-  // Officer / exit gate (accent colored)
+  // Officer / exit gate (accent colored, always recognizable — not disguised)
   drawTile(LAYOUT.officer, 'C', currentLevel.accent, PALETTE.darkest);
   ctx.fillStyle = PALETTE.darkest;
   ctx.font = 'bold 10px Courier New';
+  ctx.textAlign = 'center';
   ctx.fillText('CUSTOMS', LAYOUT.officer.x + LAYOUT.officer.w / 2, LAYOUT.officer.y + LAYOUT.officer.h + 10);
 
   // Player
