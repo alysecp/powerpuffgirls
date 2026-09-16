@@ -1012,6 +1012,9 @@ let stamps = 0;
 let levelIndex = 1; // absolute level count across the whole run (keeps climbing past 20; drives Vibe scaling)
 let currentCountryIdx = 0; // index into LEVELS currently showing
 let currentLevel = LEVELS[0]; // overwritten by loadLevel() before the title screen is ever dismissed
+// Countries already visited this run (by LEVELS index) — each one can only
+// come up once per random-selection cycle; see pickRandomCountryIndex().
+let visitedCountries = new Set();
 
 const DEFAULT_COUNTRY_IDX = 17; // Spain — every user starts here, no country picker
 
@@ -1106,7 +1109,8 @@ function saveSession() {
       levelIndex,
       countryListIdx: currentCountryIdx,
       stamps,
-      vibeIndex
+      vibeIndex,
+      visited: Array.from(visitedCountries)
     }));
   } catch (e) {
     // localStorage unavailable (private browsing, storage disabled, etc.) — ignore
@@ -1130,10 +1134,19 @@ function clearSession() {
   }
 }
 
-// Uniformly random pick from the country list — used for every level after
-// the player's chosen starting country (level 1 is picked on the title screen).
+// Random pick from the countries NOT yet visited this run, so each country
+// only comes up once per cycle. Once every country has been visited, the
+// cycle resets (all 20 become eligible again) so the run can keep going.
 function pickRandomCountryIndex() {
-  return Math.floor(Math.random() * LEVELS.length);
+  let available = [];
+  for (let i = 0; i < LEVELS.length; i++) {
+    if (!visitedCountries.has(i)) available.push(i);
+  }
+  if (available.length === 0) {
+    visitedCountries.clear();
+    for (let i = 0; i < LEVELS.length; i++) available.push(i);
+  }
+  return available[Math.floor(Math.random() * available.length)];
 }
 
 // `idx` is the absolute level count (still drives Vibe scaling and never
@@ -1143,6 +1156,7 @@ function loadLevel(idx, countryListIdx) {
   levelIndex = idx;
   currentCountryIdx = countryListIdx;
   currentLevel = LEVELS[countryListIdx];
+  visitedCountries.add(countryListIdx);
   player.x = PLAYER_START.x;
   player.y = PLAYER_START.y;
   camera.x = 0;
@@ -1232,6 +1246,7 @@ function triggerGameOver() {
 function restartGame() {
   vibeIndex = VIBE_START;
   stamps = 0;
+  visitedCountries.clear();
   gameOverModal.classList.add('hidden');
   dialogBox.classList.add('hidden');
   // Back to the title screen; Start Journey always begins a new adventure at Spain
@@ -1338,6 +1353,7 @@ restartBtn.addEventListener('click', restartGame);
 // No country picker: every new game starts at DEFAULT_COUNTRY_IDX (Spain).
 // Every country after that is still chosen at random (see pickRandomCountryIndex()).
 startBtn.addEventListener('click', () => {
+  visitedCountries.clear(); // fresh adventure — no countries visited yet
   titleScreen.classList.add('hidden');
   loadLevel(1, DEFAULT_COUNTRY_IDX);
   gameState = 'playing';
@@ -1350,6 +1366,7 @@ continueBtn.addEventListener('click', () => {
   if (session) {
     stamps = session.stamps;
     vibeIndex = session.vibeIndex;
+    visitedCountries = new Set(session.visited || []);
     loadLevel(session.levelIndex, session.countryListIdx); // restarts at the beginning of that level
   }
   continuePrompt.classList.add('hidden');
@@ -1358,6 +1375,7 @@ continueBtn.addEventListener('click', () => {
 
 newGameBtn.addEventListener('click', () => {
   clearSession();
+  visitedCountries.clear();
   continuePrompt.classList.add('hidden');
   titleScreen.classList.remove('hidden');
   // gameState stays 'title' until Start Journey is pressed on the title screen
