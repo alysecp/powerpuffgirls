@@ -173,7 +173,7 @@
   .rulesList { text-align: left; margin: 10px 0; padding: 0 4px; }
   .rulesList p { margin: 6px 0; font-size: 12.5px; }
   .rulesList .arrow { margin-right: 4px; }
-  .configBox, .controlsBox {
+  .controlsBox {
     text-align: left;
     background: var(--ui-light);
     color: var(--ui-darkest);
@@ -182,17 +182,6 @@
     padding: 8px 10px;
     margin: 10px 0;
     font-size: 11.5px;
-  }
-  .configBox label { display: block; margin-bottom: 4px; opacity: 0.85; }
-  .configBox select {
-    width: 100%;
-    font-family: inherit;
-    font-size: 12px;
-    background: var(--ui-light);
-    color: var(--ui-darkest);
-    border: 2px solid var(--ui-darkest);
-    border-radius: 6px;
-    padding: 5px;
   }
   .quizOption {
     display: block;
@@ -218,8 +207,8 @@
   #quizFeedback.hidden { display: none; }
   #quizFeedbackText { font-size: 13px; font-weight: bold; margin: 10px 0; }
 
-  #restartBtn, #startBtn, #quizContinueBtn {
-    margin-top: 10px;
+  #restartBtn, #startBtn, #quizContinueBtn, #continueBtn, #newGameBtn {
+    margin: 10px 6px 0;
     padding: 11px 22px;
     font-family: inherit;
     font-size: 14px;
@@ -230,7 +219,8 @@
     cursor: pointer;
     font-weight: bold;
   }
-  #restartBtn:hover, #startBtn:hover, #quizContinueBtn:hover { background: var(--ui-darkest); color: var(--ui-light); }
+  #restartBtn:hover, #startBtn:hover, #quizContinueBtn:hover,
+  #continueBtn:hover, #newGameBtn:hover { background: var(--ui-darkest); color: var(--ui-light); }
 
   /* ---- Responsive: single centered column, touch controls, below ~580px ---- */
   @media (max-width: 580px), (pointer: coarse) {
@@ -284,7 +274,7 @@
 </div>
 
 <!-- ===================== CLIENT / UI: Title Screen ===================== -->
-<div id="titleScreen" class="modalOverlay">
+<div id="titleScreen" class="modalOverlay hidden">
   <div class="modalBox">
     <h2>Passport Panic</h2>
     <div class="rulesList">
@@ -296,10 +286,6 @@
     <div class="controlsBox">
       Move: WASD / Arrow Keys<br>
       Interact: Space / Z (or on-screen buttons)
-    </div>
-    <div class="configBox">
-      <label for="startCountrySelect">Choose your first country:</label>
-      <select id="startCountrySelect"></select>
     </div>
     <button id="startBtn">Start Journey</button>
   </div>
@@ -339,6 +325,16 @@
     <p>Your Vibe hit 0. Entry denied.</p>
     <p id="gameOverStats"></p>
     <button id="restartBtn">Restart Journey</button>
+  </div>
+</div>
+
+<!-- ===================== CLIENT / UI: Continue-Session Prompt ===================== -->
+<div id="continuePrompt" class="modalOverlay hidden">
+  <div class="modalBox">
+    <h2>Welcome Back!</h2>
+    <p id="continuePromptText"></p>
+    <button id="continueBtn">Continue Adventure</button>
+    <button id="newGameBtn">Start New Game</button>
   </div>
 </div>
 
@@ -1014,7 +1010,10 @@ const ENCOUNTER_PATTERNS = [
 let vibeIndex = VIBE_START;
 let stamps = 0;
 let levelIndex = 1; // absolute level count across the whole run (keeps climbing past 20; drives Vibe scaling)
+let currentCountryIdx = 0; // index into LEVELS currently showing
 let currentLevel = LEVELS[0]; // overwritten by loadLevel() before the title screen is ever dismissed
+
+const DEFAULT_COUNTRY_IDX = 17; // Spain — every user starts here, no country picker
 
 // ---- Per-level transient state ----
 let player = { x: PLAYER_START.x, y: PLAYER_START.y };
@@ -1051,7 +1050,6 @@ const hudLevel = document.getElementById('hudLevel');
 
 const titleScreen = document.getElementById('titleScreen');
 const startBtn = document.getElementById('startBtn');
-const startCountrySelect = document.getElementById('startCountrySelect');
 
 const dpadUp = document.getElementById('dpadUp');
 const dpadDown = document.getElementById('dpadDown');
@@ -1082,11 +1080,54 @@ const gameOverModal = document.getElementById('gameOverModal');
 const gameOverStats = document.getElementById('gameOverStats');
 const restartBtn = document.getElementById('restartBtn');
 
+const continuePrompt = document.getElementById('continuePrompt');
+const continuePromptText = document.getElementById('continuePromptText');
+const continueBtn = document.getElementById('continueBtn');
+const newGameBtn = document.getElementById('newGameBtn');
+
 function updateHUD() {
   hudCountry.textContent = `Country: ${currentLevel.country}`;
   hudVibe.textContent = `VIBE:${Math.round(vibeIndex)}`;
   hudStamps.textContent = `Stamps: ${stamps}`;
   hudLevel.textContent = `Level: ${levelIndex}`;
+  saveSession();
+}
+
+/* ---------------------------------------------------------------------
+   Session persistence (localStorage) — a refresh/reload prompts the
+   player to continue their last adventure (same level, stamps, and Vibe;
+   the level itself restarts at its beginning) or start a new game.
+--------------------------------------------------------------------- */
+const SESSION_KEY = 'passportPanicSession';
+
+function saveSession() {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      levelIndex,
+      countryListIdx: currentCountryIdx,
+      stamps,
+      vibeIndex
+    }));
+  } catch (e) {
+    // localStorage unavailable (private browsing, storage disabled, etc.) — ignore
+  }
+}
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch (e) {
+    // ignore
+  }
 }
 
 // Uniformly random pick from the country list — used for every level after
@@ -1100,6 +1141,7 @@ function pickRandomCountryIndex() {
 // two are independent now that country order is randomized after level 1.
 function loadLevel(idx, countryListIdx) {
   levelIndex = idx;
+  currentCountryIdx = countryListIdx;
   currentLevel = LEVELS[countryListIdx];
   player.x = PLAYER_START.x;
   player.y = PLAYER_START.y;
@@ -1184,6 +1226,7 @@ function triggerGameOver() {
   gameState = 'gameover';
   gameOverStats.textContent = `Final Level Reached: ${levelIndex} — Passport Stamps: ${stamps}`;
   gameOverModal.classList.remove('hidden');
+  clearSession(); // a deported run can't be continued
 }
 
 function restartGame() {
@@ -1191,7 +1234,7 @@ function restartGame() {
   stamps = 0;
   gameOverModal.classList.add('hidden');
   dialogBox.classList.add('hidden');
-  // Back to the title screen so the player can choose a starting country again
+  // Back to the title screen; Start Journey always begins a new adventure at Spain
   titleScreen.classList.remove('hidden');
   gameState = 'title';
 }
@@ -1292,21 +1335,32 @@ quizOptionA.addEventListener('click', () => answerQuiz(0));
 quizOptionB.addEventListener('click', () => answerQuiz(1));
 restartBtn.addEventListener('click', restartGame);
 
-// Populate the "start at country" dropdown from the level data. The player
-// picks their first country here; every country after that is chosen at
-// random from this same list (see pickRandomCountryIndex()).
-LEVELS.forEach((level, i) => {
-  const opt = document.createElement('option');
-  opt.value = String(i);
-  opt.textContent = level.country;
-  startCountrySelect.appendChild(opt);
+// No country picker: every new game starts at DEFAULT_COUNTRY_IDX (Spain).
+// Every country after that is still chosen at random (see pickRandomCountryIndex()).
+startBtn.addEventListener('click', () => {
+  titleScreen.classList.add('hidden');
+  loadLevel(1, DEFAULT_COUNTRY_IDX);
+  gameState = 'playing';
 });
 
-startBtn.addEventListener('click', () => {
-  const chosenCountryIdx = parseInt(startCountrySelect.value, 10) || 0;
-  titleScreen.classList.add('hidden');
-  loadLevel(1, chosenCountryIdx);
+// Continue-session prompt: shown at boot instead of the title screen when
+// a saved session exists (see boot section at the bottom of this script).
+continueBtn.addEventListener('click', () => {
+  const session = loadSession();
+  if (session) {
+    stamps = session.stamps;
+    vibeIndex = session.vibeIndex;
+    loadLevel(session.levelIndex, session.countryListIdx); // restarts at the beginning of that level
+  }
+  continuePrompt.classList.add('hidden');
   gameState = 'playing';
+});
+
+newGameBtn.addEventListener('click', () => {
+  clearSession();
+  continuePrompt.classList.add('hidden');
+  titleScreen.classList.remove('hidden');
+  // gameState stays 'title' until Start Journey is pressed on the title screen
 });
 
 // Touch controls: mirror the keyboard exactly (same keysDown set and the
@@ -2204,9 +2258,27 @@ function gameLoop() {
 }
 
 /* ---------------------------------------------------------------------
-   Boot
+   Boot: a saved session prompts to continue (picking up at that exact
+   saved country/level/stamps/Vibe) or start fresh; a fresh start always
+   begins at DEFAULT_COUNTRY_IDX (Spain), with no country picker.
+   Read any saved session BEFORE the loadLevel() call below, since that
+   call itself triggers a save (via updateHUD()) that would otherwise
+   overwrite the very session we're about to check for.
 --------------------------------------------------------------------- */
-loadLevel(1, 0); // default Japan behind the title screen until Start is pressed
+const savedSession = loadSession();
+
+loadLevel(1, DEFAULT_COUNTRY_IDX); // default behind whichever screen shows next
+
+if (savedSession) {
+  const savedCountry = LEVELS[savedSession.countryListIdx].country;
+  continuePromptText.textContent =
+    `Continue your journey at Level ${savedSession.levelIndex} (${savedCountry}) ` +
+    `with ${savedSession.stamps} stamp(s) and ${savedSession.vibeIndex} Vibe?`;
+  continuePrompt.classList.remove('hidden');
+} else {
+  titleScreen.classList.remove('hidden');
+}
+
 gameLoop();
 </script>
 </body>
