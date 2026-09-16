@@ -1033,24 +1033,32 @@ const LEVELS = [
    physical slot, statically per level (not randomized at runtime), so
    the same world position isn't safe/dangerous every single level.
 --------------------------------------------------------------------- */
-const WORLD_WIDTH = 1600;
-const WORLD_HEIGHT = 900;
+// World shrunk 50% from the original 1600x900 — half the distance to
+// wander, same building/character sizes (TILE_SIZE/PLAYER_SIZE untouched).
+const WORLD_WIDTH = 800;
+const WORLD_HEIGHT = 450;
 
-const PLAYER_START = { x: 70, y: 430 };
+const BASE_PLAYER_START = { x: 35, y: 215 };
+let playerStart = BASE_PLAYER_START; // mirrored per country in buildMapForCountry() so entry stays opposite the landmark
 const PLAYER_SIZE = 28;
 
 const TILE_SIZE = 64;
-const LAYOUT = {
+// BASE_LAYOUT is the "design" layout (variant 0); loadLevel() derives the
+// actual mutable LAYOUT below by optionally mirroring it horizontally per
+// country (see buildMapForCountry()), so each country's map differs while
+// collision hitboxes and visuals always stay in sync.
+const BASE_LAYOUT = {
   // Far end of the map: capital landmark + bench + officer, side by side
-  officer: { x: 1460, y: 460, w: 70, h: 54 },
-  landmarkPos: { x: 1340, y: 420 }, // reference point drawWorldLandmark() draws around (scaled 6x, keep clear of the world edge)
-  benchPos: { x: 1460, y: 500 },
+  officer: { x: 730, y: 230, w: 70, h: 54 },
+  landmarkPos: { x: 670, y: 210 }, // reference point drawWorldLandmark() draws around (scaled 6x, keep clear of the world edge)
+  benchPos: { x: 730, y: 250 },
 
-  slot1: { x: 430,  y: 160, w: TILE_SIZE, h: TILE_SIZE },
-  slot2: { x: 720,  y: 660, w: TILE_SIZE, h: TILE_SIZE },
-  slot3: { x: 1000, y: 210, w: TILE_SIZE, h: TILE_SIZE },
-  slot4: { x: 1260, y: 700, w: TILE_SIZE, h: TILE_SIZE }
+  slot1: { x: 215, y: 80,  w: TILE_SIZE, h: TILE_SIZE },
+  slot2: { x: 360, y: 330, w: TILE_SIZE, h: TILE_SIZE },
+  slot3: { x: 500, y: 105, w: TILE_SIZE, h: TILE_SIZE },
+  slot4: { x: 630, y: 350, w: TILE_SIZE, h: TILE_SIZE }
 };
+let LAYOUT = BASE_LAYOUT; // reassigned per level in buildMapForCountry()
 const SLOT_KEYS = ['slot1', 'slot2', 'slot3', 'slot4'];
 
 // Each entry maps content keys onto [slot1, slot2, slot3, slot4], in some order.
@@ -1073,18 +1081,20 @@ const SLOT_ROLES = { slot1: 'cafe', slot2: 'hotel', slot3: 'bar', slot4: 'sign' 
 // A visible guiding path from the entry point, past every building/sign,
 // to the landmark cluster — same waypoints every level (only the ground
 // tint/pattern around it changes), so the map reads without instructions.
-const PATH_WAYPOINTS = [
-  { x: 70, y: 430 },   // entry point (PLAYER_START)
-  { x: 300, y: 400 },
-  { x: 430, y: 220 },  // past the café (slot1)
-  { x: 600, y: 400 },
-  { x: 720, y: 600 },  // past the hotel (slot2)
-  { x: 880, y: 400 },
-  { x: 1000, y: 280 }, // past the bar (slot3)
-  { x: 1150, y: 450 },
-  { x: 1260, y: 640 }, // past the sign (slot4)
-  { x: 1400, y: 480 }  // landmark / customs desk
+// BASE_ = variant 0; mirrored per country in buildMapForCountry() below.
+const BASE_PATH_WAYPOINTS = [
+  { x: 35, y: 215 },   // entry point (PLAYER_START)
+  { x: 150, y: 200 },
+  { x: 215, y: 110 },  // past the café (slot1)
+  { x: 300, y: 200 },
+  { x: 360, y: 300 },  // past the hotel (slot2)
+  { x: 440, y: 200 },
+  { x: 500, y: 140 },  // past the bar (slot3)
+  { x: 575, y: 225 },
+  { x: 630, y: 320 },  // past the sign (slot4)
+  { x: 700, y: 240 }   // landmark / customs desk
 ];
+let PATH_WAYPOINTS = BASE_PATH_WAYPOINTS;
 
 /* =====================================================================
    LOGIC / MIDDLEWARE LAYER
@@ -1108,7 +1118,7 @@ let savedSession = null;
 const DEFAULT_COUNTRY_IDX = 17; // Spain — every user starts here, no country picker
 
 // ---- Per-level transient state ----
-let player = { x: PLAYER_START.x, y: PLAYER_START.y };
+let player = { x: BASE_PLAYER_START.x, y: BASE_PLAYER_START.y };
 let camera = { x: 0, y: 0 }; // top-left world coordinate currently shown in the viewport
 // Which content key (clue1/clue2/hazard1/hazard2) currently backs each physical slot
 let slotAssignment = {};
@@ -1293,6 +1303,30 @@ function pickRandomCountryIndex() {
   return available[Math.floor(Math.random() * available.length)];
 }
 
+// Mirrors a rect/point horizontally around the world's vertical midline.
+function mirrorPoint(p, mirrored) {
+  if (!mirrored) return p;
+  return { ...p, x: WORLD_WIDTH - p.x - (p.w || 0) };
+}
+
+// Every country map should look different: rather than authoring 20
+// bespoke layouts, odd-indexed countries get the whole map (buildings,
+// path, river, bridge) mirrored horizontally — cheap, and it keeps
+// collision (LAYOUT) and visuals (path/river/bridge) perfectly in sync
+// since they're all derived from the same BASE_ coordinates + flag.
+function buildMapForCountry(countryListIdx) {
+  const mirrored = countryListIdx % 2 === 1;
+  const nextLayout = {};
+  for (const key in BASE_LAYOUT) nextLayout[key] = mirrorPoint(BASE_LAYOUT[key], mirrored);
+  LAYOUT = nextLayout;
+  PATH_WAYPOINTS = BASE_PATH_WAYPOINTS.map((p) => mirrorPoint(p, mirrored));
+  RIVER_WAYPOINTS = BASE_RIVER_WAYPOINTS.map((p) => mirrorPoint(p, mirrored));
+  bridgePos = mirrored
+    ? { x: WORLD_WIDTH - BASE_BRIDGE.x, y: BASE_BRIDGE.y, angle: Math.PI - BASE_BRIDGE.angle }
+    : BASE_BRIDGE;
+  playerStart = mirrorPoint(BASE_PLAYER_START, mirrored); // always opposite the (also-mirrored) landmark
+}
+
 // `idx` is the absolute level count (still drives Vibe scaling and never
 // loops); `countryListIdx` is which LEVELS[] entry to show this time — the
 // two are independent now that country order is randomized after level 1.
@@ -1301,8 +1335,9 @@ function loadLevel(idx, countryListIdx) {
   currentCountryIdx = countryListIdx;
   currentLevel = LEVELS[countryListIdx];
   visitedCountries.add(countryListIdx);
-  player.x = PLAYER_START.x;
-  player.y = PLAYER_START.y;
+  buildMapForCountry(countryListIdx);
+  player.x = playerStart.x;
+  player.y = playerStart.y;
   camera.x = 0;
   camera.y = 0;
 
@@ -2012,19 +2047,19 @@ function getCityStyle(level) {
 // hotel, bar, and sign are drawn at the fixed slot positions (see
 // drawSlotStructure()) so there's no duplicate/confusing "second café."
 function drawDecorations(cityStyle) {
-  drawTree(40, 60, 0.9);
-  drawTree(900, 55, 0.8);
-  drawTree(1320, 830, 0.9);
-  drawTree(60, 840, 0.8);
-  drawTree(480, 60, 0.7);
-  drawTree(850, 830, 0.8);
-  drawTree(1500, 200, 0.75);
-  drawTree(120, 300, 0.7);
-  drawTree(1050, 850, 0.7);
-  drawTree(550, 850, 0.65);
+  drawTree(20, 30, 0.9);
+  drawTree(450, 28, 0.8);
+  drawTree(660, 415, 0.9);
+  drawTree(30, 420, 0.8);
+  drawTree(240, 30, 0.7);
+  drawTree(425, 415, 0.8);
+  drawTree(750, 100, 0.75);
+  drawTree(60, 150, 0.7);
+  drawTree(525, 425, 0.7);
+  drawTree(275, 425, 0.65);
 
-  drawCottage(150, 540, 64, 56, { roof: cityStyle.roof, wall: cityStyle.wall });
-  drawCottage(1180, 120, 64, 56, { roof: cityStyle.roof, wall: cityStyle.wall });
+  drawCottage(75, 270, 64, 56, { roof: cityStyle.roof, wall: cityStyle.wall });
+  drawCottage(590, 60, 64, 56, { roof: cityStyle.roof, wall: cityStyle.wall });
 
   FLOWER_SPOTS.forEach((p) => drawFlowerPatch(p.x, p.y));
 }
@@ -2043,29 +2078,30 @@ function drawBench(x, y) {
 // Section 6: the country's capital landmark, drawn large at the far end
 // of the map — reuses the same glyph as the passport stamp (drawStampIcon)
 // just scaled way up, so each country's art is only ever authored once.
-// A bold dark outline behind a colorful accent-tinted fill (a cheap
-// two-pass "poor man's outline" — draw the shape slightly bigger in ink,
-// then again at normal size in the accent color on top) gives all 20
-// landmarks a bolder, more cartoon-y silhouette with zero bespoke redraws.
+// Rendered as one flat, consistent color (the country's accent) — an
+// earlier "poor man's outline" (drawing the shape twice at a uniform
+// scale-up) looked inconsistent because scaling around the origin doesn't
+// produce an even-width halo for shapes that aren't centered on it,
+// leaving mismatched color fringes on asymmetric landmarks.
 function drawWorldLandmark(type, country) {
   const pos = LAYOUT.landmarkPos;
   ctx.save();
   ctx.translate(pos.x, pos.y);
   ctx.scale(6, 6);
-
-  ctx.save();
-  ctx.scale(1.12, 1.12); // slightly larger "ink" pass forms the outline halo
-  ctx.fillStyle = SCENE_PALETTE.woodDark;
-  ctx.strokeStyle = SCENE_PALETTE.woodDark;
-  ctx.lineWidth = 1;
+  ctx.fillStyle = currentLevel.accent;
+  ctx.strokeStyle = currentLevel.accent;
+  ctx.lineWidth = 0.8;
   drawStampIcon(type);
   ctx.restore();
 
-  ctx.fillStyle = currentLevel.accent;
-  ctx.strokeStyle = currentLevel.accent;
-  ctx.lineWidth = 0.6;
-  drawStampIcon(type);
-
+  // soft grounding shadow beneath the landmark (not part of the landmark's
+  // own color — just an environmental cue, same for every country)
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = SCENE_PALETTE.stoneDark;
+  ctx.beginPath();
+  ctx.ellipse(pos.x, pos.y + 118, 70, 14, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 
   drawTextLabel(country.toUpperCase(), pos.x, pos.y + 145);
@@ -2224,33 +2260,40 @@ function drawGuidingPath() {
 // Landscaping: a winding river crossing the map, drawn with the same
 // flowing-curve technique as the guiding path. Purely decorative (no
 // collision), like every other background feature.
-const RIVER_WAYPOINTS = [
-  { x: 220, y: -20 },
-  { x: 340, y: 220 },
-  { x: 230, y: 430 },
-  { x: 380, y: 640 },
-  { x: 300, y: 920 }
+const BASE_RIVER_WAYPOINTS = [
+  { x: 110, y: -10 },
+  { x: 170, y: 110 },
+  { x: 115, y: 215 },
+  { x: 190, y: 320 },
+  { x: 150, y: 460 }
 ];
+let RIVER_WAYPOINTS = BASE_RIVER_WAYPOINTS;
+
+// Where the guiding path crosses the river — mirrored along with everything
+// else in buildMapForCountry() (the angle flips too, so the bridge still
+// sits square across the mirrored river).
+const BASE_BRIDGE = { x: 142.5, y: 162.5, angle: 0.48 };
+let bridgePos = BASE_BRIDGE;
 
 function drawRiver() {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
   ctx.strokeStyle = SCENE_PALETTE.waterDark;
-  ctx.lineWidth = 46;
+  ctx.lineWidth = 30;
   tracePath(RIVER_WAYPOINTS);
   ctx.stroke();
 
   ctx.strokeStyle = SCENE_PALETTE.water;
-  ctx.lineWidth = 38;
+  ctx.lineWidth = 24;
   tracePath(RIVER_WAYPOINTS);
   ctx.stroke();
 
   // shimmer highlight
   ctx.globalAlpha = 0.35;
   ctx.strokeStyle = SCENE_PALETTE.wall;
-  ctx.lineWidth = 3;
-  ctx.setLineDash([10, 16]);
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 14]);
   tracePath(RIVER_WAYPOINTS);
   ctx.stroke();
   ctx.setLineDash([]);
@@ -2728,7 +2771,7 @@ function render() {
   drawFloor(currentLevel.accent, cityStyle.ground);
   drawRiver();
   drawGuidingPath();
-  drawBridge(285, 325, 0.48); // where the guiding path crosses the river
+  drawBridge(bridgePos.x, bridgePos.y, bridgePos.angle);
   drawHedgeBorder();
   drawDecorations(cityStyle);
 
