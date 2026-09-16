@@ -132,7 +132,7 @@
   .quizOption:hover { background: #8bac0f; color: #0f380f; }
   .quizProgress { font-size: 11px; opacity: 0.8; margin-bottom: 6px; }
 
-  #restartBtn, #startBtn {
+   #restartBtn, #startBtn {
     margin-top: 10px;
     padding: 10px 20px;
     font-family: inherit;
@@ -251,12 +251,24 @@ function getVibeAmount(currentLevelNumber) {
 }
 
 /* ---------------------------------------------------------------------
+   DATA LAYER: level-transition timing (passport stamp, then flight)
+--------------------------------------------------------------------- */
+const STAMP_IN_MS = 220;   // stamp pops in
+const STAMP_HOLD_MS = 650; // stamp holds fully visible
+const STAMP_OUT_MS = 230;  // stamp fades/clears from the screen
+const STAMP_TOTAL_MS = STAMP_IN_MS + STAMP_HOLD_MS + STAMP_OUT_MS;
+const PLANE_MS = 1000;     // airplane flies across the screen
+const TRANSITION_TOTAL_MS = STAMP_TOTAL_MS + PLANE_MS;
+
+/* ---------------------------------------------------------------------
    DATA LAYER: all 20 country levels in fixed rotation order.
    Levels 1-5 are fully authored with real cultural facts + quizzes.
    Levels 6-20 are placeholders (same structure/behavior, swap-in-ready).
    `landmark` picks a simple background silhouette drawn in drawLandmark()
    below, using only PALETTE colors, to give each map its country "vibe".
-   Each level: { country, accent, landmark, clue1, clue2, quiz: [ {q, options:[a,b], correct}, ... ] }
+   `hazard1`/`hazard2` are the country-specific cultural-misstep flavor
+   text shown when a disguised hazard slot is engaged (see triggerHazard()).
+   Each level: { country, accent, landmark, clue1, clue2, hazard1, hazard2, quiz: [ {q, options:[a,b], correct}, ... ] }
 --------------------------------------------------------------------- */
 const LEVELS = [
   // 1 - JAPAN (built)
@@ -266,6 +278,8 @@ const LEVELS = [
     landmark: "toriiGate",
     clue1: "In Japan, it's customary to remove your shoes before entering someone's home.",
     clue2: "Bowing is a traditional greeting in Japan, often used in place of handshakes in formal situations.",
+    hazard1: "You left a tip on the table for the waiter — an awkward moment, since tipping isn't customary in Japan and can even cause confusion.",
+    hazard2: "You pointed at the menu with your chopsticks — a small habit that many in Japan consider quite rude at the table.",
     quiz: [
       { q: "Before entering a home in Japan, what should you do?", options: ["Remove your shoes", "Keep your shoes on"], correct: 0 },
       { q: "What is a traditional greeting in Japan?", options: ["A big hug", "A bow"], correct: 1 }
@@ -278,6 +292,8 @@ const LEVELS = [
     landmark: "eiffelTower",
     clue1: "In France, it's polite to greet shopkeepers with 'Bonjour' before starting any conversation.",
     clue2: "Bread such as a baguette is traditionally placed directly on the table, not on a separate plate.",
+    hazard1: "You launched straight into English without a greeting — the shopkeeper's mood visibly cools.",
+    hazard2: "You showed up to a dinner party empty-handed — your host was clearly expecting a small gift.",
     quiz: [
       { q: "What should you say when entering a French shop?", options: ["Nothing at all", "Bonjour"], correct: 1 },
       { q: "Where is bread traditionally placed at a French table?", options: ["Directly on the table", "Only on your plate"], correct: 0 }
@@ -290,6 +306,8 @@ const LEVELS = [
     landmark: "pyramid",
     clue1: "In Egypt, it's customary to accept tea or coffee when offered as a guest, since declining can seem impolite.",
     clue2: "Many people in Egypt eat and pass food with the right hand, as the left hand is traditionally seen as unclean.",
+    hazard1: "You sat cross-legged and let the sole of your shoe point at your host — an unintentional insult in Egypt.",
+    hazard2: "You reached for the shared platter with your left hand, drawing a few disapproving glances.",
     quiz: [
       { q: "As a guest in Egypt, if offered tea you should:", options: ["Accept it politely", "Refuse it immediately"], correct: 0 },
       { q: "Which hand is traditionally used for eating in Egypt?", options: ["The left hand", "The right hand"], correct: 1 }
@@ -302,6 +320,8 @@ const LEVELS = [
     landmark: "colosseum",
     clue1: "In Italy, cappuccino is traditionally a breakfast drink and is rarely ordered after 11am or with a meal.",
     clue2: "During meals in Italy, it's considered polite to keep your hands visible above the table, not in your lap.",
+    hazard1: "You asked for parmesan on your seafood pasta — the chef considers that pairing close to sacrilege.",
+    hazard2: "You started eating before anyone said 'Buon appetito' — the table pauses, a little thrown by it.",
     quiz: [
       { q: "When is cappuccino traditionally consumed in Italy?", options: ["In the morning", "Right after dinner"], correct: 0 },
       { q: "Where should your hands stay during an Italian meal?", options: ["In your lap", "Visible above the table"], correct: 1 }
@@ -314,69 +334,71 @@ const LEVELS = [
     landmark: "christRedeemer",
     clue1: "In Brazil, greetings often include a kiss on the cheek, and the number of kisses can vary by region.",
     clue2: "The 'thumbs up' gesture is commonly used in Brazil to mean 'okay' or 'great'.",
+    hazard1: "You flashed the 'OK' hand sign to say thanks — in Brazil that gesture can actually read as an insult.",
+    hazard2: "You strolled into a business meeting fashionably late — punctuality mattered a lot more than you thought.",
     quiz: [
       { q: "How do people in Brazil often greet each other?", options: ["With a kiss on the cheek", "With a formal bow"], correct: 0 },
       { q: "What does a 'thumbs up' commonly mean in Brazil?", options: ["Okay / great", "An insult"], correct: 0 }
     ]
   },
   // 6-20 - PLACEHOLDERS (same structure & flow; swap real content in later)
-  { country: "India",        accent: ACCENT_POOL[5 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "India",        accent: ACCENT_POOL[5 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Mexico",       accent: ACCENT_POOL[6 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Mexico",       accent: ACCENT_POOL[6 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Thailand",     accent: ACCENT_POOL[7 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Thailand",     accent: ACCENT_POOL[7 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Morocco",      accent: ACCENT_POOL[8 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Morocco",      accent: ACCENT_POOL[8 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Germany",      accent: ACCENT_POOL[9 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Germany",      accent: ACCENT_POOL[9 % 4],  landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "South Korea",  accent: ACCENT_POOL[10 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "South Korea",  accent: ACCENT_POOL[10 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Greece",       accent: ACCENT_POOL[11 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Greece",       accent: ACCENT_POOL[11 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Peru",         accent: ACCENT_POOL[12 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Peru",         accent: ACCENT_POOL[12 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Turkey",       accent: ACCENT_POOL[13 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Turkey",       accent: ACCENT_POOL[13 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Kenya",        accent: ACCENT_POOL[14 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Kenya",        accent: ACCENT_POOL[14 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Norway",       accent: ACCENT_POOL[15 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Norway",       accent: ACCENT_POOL[15 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Vietnam",      accent: ACCENT_POOL[16 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Vietnam",      accent: ACCENT_POOL[16 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Spain",        accent: ACCENT_POOL[17 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Spain",        accent: ACCENT_POOL[17 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "New Zealand",  accent: ACCENT_POOL[18 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "New Zealand",  accent: ACCENT_POOL[18 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]},
-  { country: "Argentina",    accent: ACCENT_POOL[19 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", quiz: [
+  { country: "Argentina",    accent: ACCENT_POOL[19 % 4], landmark: "placeholder", clue1: "PLACEHOLDER_CLUE_1", clue2: "PLACEHOLDER_CLUE_2", hazard1: "PLACEHOLDER_HAZARD_1", hazard2: "PLACEHOLDER_HAZARD_2", quiz: [
       { q: "PLACEHOLDER_QUIZ_QUESTION_1", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 },
       { q: "PLACEHOLDER_QUIZ_QUESTION_2", options: ["PLACEHOLDER_OPTION_A", "PLACEHOLDER_OPTION_B"], correct: 0 }
   ]}
@@ -431,11 +453,16 @@ let player = { x: PLAYER_START.x, y: PLAYER_START.y };
 // Which content key (clue1/clue2/hazard1/hazard2) currently backs each physical slot
 let slotAssignment = {};
 
-// ---- Finite state machine: 'title' | 'playing' | 'dialog' | 'quiz' | 'gameover' ----
+// ---- Finite state machine: 'title' | 'playing' | 'dialog' | 'quiz' | 'transition' | 'gameover' ----
 let gameState = 'title';
 
 // Queued action to run once the current dialog box is dismissed (e.g. open quiz)
 let pendingAfterDialog = null;
+
+// ---- Level transition (passport stamp, then flight) state ----
+let transitionStartTime = 0;
+let transitionNextLevelIdx = null;
+let transitionCaption = '';
 
 // ---- Input tracking ----
 const keysDown = new Set();
@@ -516,12 +543,12 @@ function flashRed() {
   setTimeout(() => flashOverlay.classList.remove('active'), 160);
 }
 
-function triggerHazard() {
+function triggerHazard(contentKey) {
   const amount = getVibeAmount(levelIndex);
   vibeIndex = Math.max(VIBE_MIN, vibeIndex - amount);
   flashRed();
   updateHUD();
-  const message = `That "local" was actually a scammer! -${amount} Vibe.`;
+  const message = `${currentLevel[contentKey]} (-${amount} Vibe)`;
   if (vibeIndex <= VIBE_MIN) {
     showDialog(message, () => triggerGameOver());
   } else {
@@ -587,11 +614,8 @@ function finishQuiz() {
     const amount = getVibeAmount(levelIndex);
     vibeIndex = Math.min(VIBE_MAX, vibeIndex + amount);
     updateHUD();
-    const clearedCountry = currentLevel.country;
     const nextIdx = levelIndex + 1;
-    showDialog(`Passport stamped for ${clearedCountry}! +${amount} Vibe. Welcome to your next destination.`, () => {
-      loadLevel(nextIdx);
-    });
+    startLevelTransition(nextIdx, `+${amount} Vibe`);
   } else {
     // Failing a quiz never reduces vibeIndex — it simply withholds the bonus.
     showDialog(`Quiz failed! The officer sends you back to review the clues and try again.`);
@@ -606,6 +630,20 @@ startBtn.addEventListener('click', () => {
   titleScreen.classList.add('hidden');
   gameState = 'playing';
 });
+
+/* ---------------------------------------------------------------------
+   Level transition: passport stamp (country-specific), then it clears,
+   then an airplane flies across the screen — all before the next level
+   loads. `currentLevel` is intentionally left untouched throughout, since
+   it's still the just-cleared country being stamped; loadLevel(nextIdx)
+   only runs once the whole sequence finishes (see update()).
+--------------------------------------------------------------------- */
+function startLevelTransition(nextIdx, caption) {
+  gameState = 'transition';
+  transitionNextLevelIdx = nextIdx;
+  transitionCaption = caption;
+  transitionStartTime = performance.now();
+}
 
 /* ---------------------------------------------------------------------
    Input handling
@@ -649,7 +687,7 @@ function handleInteract() {
       if (contentKey.startsWith('clue')) {
         showDialog(`A friendly local shares a tip: "${currentLevel[contentKey]}"`);
       } else {
-        triggerHazard();
+        triggerHazard(contentKey);
       }
       return;
     }
@@ -665,6 +703,16 @@ function handleInteract() {
 const SPEED = 3;
 
 function update() {
+  if (gameState === 'transition') {
+    const elapsed = performance.now() - transitionStartTime;
+    if (elapsed >= TRANSITION_TOTAL_MS) {
+      const nextIdx = transitionNextLevelIdx;
+      gameState = 'playing';
+      loadLevel(nextIdx);
+    }
+    return;
+  }
+
   if (gameState === 'playing') {
     let dx = 0, dy = 0;
     if (keysDown.has('ArrowUp') || keysDown.has('KeyW')) dy -= 1;
@@ -804,7 +852,177 @@ function drawLandmark(type) {
   ctx.restore();
 }
 
+// Small simplified glyph per country, drawn centered at the origin so it
+// can be translated/scaled to sit inside the passport stamp ring.
+function drawStampIcon(type) {
+  switch (type) {
+    case 'toriiGate':
+      ctx.fillRect(-16, -18, 5, 30);
+      ctx.fillRect(11, -18, 5, 30);
+      ctx.fillRect(-22, -6, 44, 4);
+      ctx.fillRect(-26, -18, 52, 5);
+      break;
+    case 'eiffelTower':
+      ctx.beginPath();
+      ctx.moveTo(0, -22);
+      ctx.lineTo(-14, 20);
+      ctx.lineTo(14, 20);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'pyramid':
+      ctx.beginPath();
+      ctx.moveTo(0, -20);
+      ctx.lineTo(-20, 18);
+      ctx.lineTo(20, 18);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'colosseum':
+      ctx.fillRect(-20, -6, 12, 24);
+      ctx.fillRect(-6, -6, 12, 24);
+      ctx.fillRect(8, -6, 12, 24);
+      break;
+    case 'christRedeemer':
+      ctx.fillRect(-3, -18, 6, 22);
+      ctx.fillRect(-16, -6, 32, 5);
+      break;
+    default:
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, -2, 14, 0, Math.PI * 2);
+      ctx.stroke();
+  }
+}
+
+// Country-specific passport stamp: pops in, holds, then fades/clears.
+function drawStampAnimation(elapsed) {
+  let scale, alpha;
+  if (elapsed < STAMP_IN_MS) {
+    const t = elapsed / STAMP_IN_MS;
+    scale = t;
+    alpha = t;
+  } else if (elapsed < STAMP_IN_MS + STAMP_HOLD_MS) {
+    scale = 1;
+    alpha = 1;
+  } else {
+    const t = (elapsed - STAMP_IN_MS - STAMP_HOLD_MS) / STAMP_OUT_MS;
+    scale = 1;
+    alpha = 1 - t; // clears from the screen
+  }
+
+  const radius = 70;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.translate(canvas.width / 2, canvas.height / 2 - 10);
+  ctx.rotate(-0.12); // slight tilt, like a hand-stamped mark
+  ctx.scale(scale, scale);
+
+  ctx.strokeStyle = currentLevel.accent;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius - 8, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = currentLevel.accent;
+  ctx.strokeStyle = currentLevel.accent;
+  drawStampIcon(currentLevel.landmark);
+
+  ctx.font = 'bold 12px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText(currentLevel.country.toUpperCase(), 0, radius - 16);
+  ctx.font = 'bold 9px Courier New';
+  ctx.fillText('PASSPORT CONTROL', 0, -radius + 20);
+  ctx.restore();
+
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = PALETTE.darkest;
+  ctx.font = 'bold 13px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText(transitionCaption, canvas.width / 2, canvas.height - 40);
+}
+
+// Simple blocky airplane silhouette, GB style, drawn centered at the origin.
+function drawPlaneShape() {
+  ctx.fillStyle = PALETTE.dark;
+  ctx.fillRect(-30, -4, 60, 8); // fuselage
+  ctx.beginPath(); // nose
+  ctx.moveTo(30, -4);
+  ctx.lineTo(42, 0);
+  ctx.lineTo(30, 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath(); // tail fin
+  ctx.moveTo(-30, -4);
+  ctx.lineTo(-38, -16);
+  ctx.lineTo(-22, -4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath(); // top wing
+  ctx.moveTo(-4, -4);
+  ctx.lineTo(-14, -20);
+  ctx.lineTo(4, -4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath(); // bottom wing
+  ctx.moveTo(-4, 4);
+  ctx.lineTo(-14, 20);
+  ctx.lineTo(4, 4);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Airplane flies across the screen on a gentle arc before the next level loads.
+function drawPlaneAnimation(elapsed) {
+  const t = Math.max(0, Math.min(1, elapsed / PLANE_MS));
+  const startX = -60;
+  const endX = canvas.width + 60;
+  const x = startX + (endX - startX) * t;
+  const y = 140 - Math.sin(t * Math.PI) * 30;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(-0.15);
+  drawPlaneShape();
+  ctx.restore();
+
+  const nextCountry = LEVELS[(transitionNextLevelIdx - 1) % LEVELS.length].country;
+  ctx.fillStyle = PALETTE.darkest;
+  ctx.font = 'bold 13px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText(`Next stop: ${nextCountry}`, canvas.width / 2, canvas.height / 2 + 70);
+}
+
+// Full-screen "passport page" transition: stamp appears/holds/clears, then
+// the airplane crosses the screen. currentLevel still refers to the country
+// just cleared throughout (loadLevel() only runs once update() detects the
+// whole sequence has finished).
+function renderTransition() {
+  const elapsed = performance.now() - transitionStartTime;
+
+  ctx.fillStyle = PALETTE.lightest;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = currentLevel.accent;
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
+
+  if (elapsed < STAMP_TOTAL_MS) {
+    drawStampAnimation(elapsed);
+  } else {
+    drawPlaneAnimation(elapsed - STAMP_TOTAL_MS);
+  }
+}
+
 function render() {
+  if (gameState === 'transition') {
+    renderTransition();
+    return;
+  }
+
   // Background
   ctx.fillStyle = PALETTE.light;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
