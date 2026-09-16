@@ -38,20 +38,42 @@
     box-shadow: 0 10px 24px rgba(0,0,0,0.35);
     padding: 10px;
   }
+  /* Section 5: simplified HUD — Country/Vibe/Stamps only (no Level), each
+     in its own high-contrast inverted "chip" for visual prominence. */
   #hud {
     display: flex;
     flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
     justify-content: space-between;
     background: var(--ui-light);
-    color: var(--ui-darkest);
-    padding: 7px 10px;
-    font-size: 13px;
-    font-weight: bold;
+    padding: 6px;
     border: 2px solid var(--ui-darkest);
     border-radius: 10px;
-    letter-spacing: 0.5px;
   }
-  #hud span { margin-right: 8px; }
+  .hudStat {
+    flex: 1 1 auto;
+    text-align: center;
+    background: var(--ui-darkest);
+    color: var(--ui-light);
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 0.3px;
+    padding: 7px 10px;
+    border-radius: 8px;
+  }
+  #muteBtn {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    background: var(--ui-light);
+    color: var(--ui-darkest);
+    border: 2px solid var(--ui-darkest);
+    border-radius: 50%;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+  }
   #canvasWrap {
     position: relative;
     margin-top: 8px;
@@ -229,8 +251,17 @@
   @media (max-width: 580px) {
     body { padding: 6px 0; }
     #app { border-radius: 10px; padding: 8px; }
-    #hud { font-size: 11px; }
+    .hudStat { font-size: 11px; padding: 5px 6px; }
     .modalBox { padding: 14px; }
+  }
+
+  /* ---- Section 1: desktop breakpoint — whole game rendered ~50% larger.
+     `zoom` (not `transform`) scales fonts/borders/hit-areas together and
+     still participates in layout, so body's flex centering and each
+     modal's own centering keep working with zero JS/logic changes;
+     mobile (<900px) is completely untouched. ---- */
+  @media (min-width: 900px) {
+    #app, .modalOverlay { zoom: 1.5; }
   }
 </style>
 </head>
@@ -239,13 +270,10 @@
 <div id="app">
   <!-- ===================== CLIENT / UI: HUD ===================== -->
   <div id="hud">
-    <span id="hudCountry">Country: Japan</span>
-    <span>|</span>
-    <span id="hudVibe">VIBE:50</span>
-    <span>|</span>
-    <span id="hudStamps">Stamps: 0</span>
-    <span>|</span>
-    <span id="hudLevel">Level: 1</span>
+    <span id="hudCountry" class="hudStat">Country: Japan</span>
+    <span id="hudVibe" class="hudStat">VIBE:50</span>
+    <span id="hudStamps" class="hudStat">Stamps: 0</span>
+    <button id="muteBtn" aria-label="Toggle sound">🔊</button>
   </div>
 
   <div id="canvasWrap">
@@ -1002,6 +1030,30 @@ const ENCOUNTER_PATTERNS = [
   ['hazard2', 'clue1',   'hazard1', 'clue2']
 ];
 
+// Section 4: each physical slot has a FIXED visual identity across every
+// level — a believable city mix (café, hotel, bar) plus one sign. This is
+// independent of ENCOUNTER_PATTERNS above: which slot is secretly a clue
+// vs. a hazard still rotates per level, so a building's look never gives
+// away whether engaging it will help or hurt — only which of 20 real
+// buildings/signs you'll find it at is fixed.
+const SLOT_ROLES = { slot1: 'cafe', slot2: 'hotel', slot3: 'bar', slot4: 'sign' };
+
+// A visible guiding path from the entry point, past every building/sign,
+// to the landmark cluster — same waypoints every level (only the ground
+// tint/pattern around it changes), so the map reads without instructions.
+const PATH_WAYPOINTS = [
+  { x: 70, y: 430 },   // entry point (PLAYER_START)
+  { x: 300, y: 400 },
+  { x: 430, y: 220 },  // past the café (slot1)
+  { x: 600, y: 400 },
+  { x: 720, y: 600 },  // past the hotel (slot2)
+  { x: 880, y: 400 },
+  { x: 1000, y: 280 }, // past the bar (slot3)
+  { x: 1150, y: 450 },
+  { x: 1260, y: 640 }, // past the sign (slot4)
+  { x: 1400, y: 480 }  // landmark / customs desk
+];
+
 /* =====================================================================
    LOGIC / MIDDLEWARE LAYER
    ===================================================================== */
@@ -1043,6 +1095,60 @@ let transitionStartTime = 0;
 let transitionNextLevelIdx = null;
 let transitionNextCountryIdx = null;
 let transitionCaption = '';
+let planeSoundPlayed = false; // one-shot guard so the flyby sound fires once per transition
+
+// ---- Sound (Section 2): a synthesized airplane "whoosh", no audio file
+// needed. soundEnabled is persisted separately from the game session so a
+// muted preference survives a refresh even without a saved adventure. ----
+let soundEnabled = true;
+try {
+  const storedSound = localStorage.getItem('passportPanicSound');
+  if (storedSound !== null) soundEnabled = storedSound === 'on';
+} catch (e) {
+  // localStorage unavailable — default to sound on
+}
+
+let audioCtx = null;
+function getAudioContext() {
+  if (!audioCtx) {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtor) audioCtx = new AudioCtor();
+  }
+  return audioCtx;
+}
+
+// Short pitch-descending "whoosh", synthesized entirely with the Web Audio
+// API (no binary asset, nothing to fetch/host) — plays once as the plane
+// crosses the screen during a level transition.
+function playAirplaneSound() {
+  if (!soundEnabled) return;
+  const ac = getAudioContext();
+  if (!ac) return;
+  if (ac.state === 'suspended') ac.resume();
+
+  const now = ac.currentTime;
+  const osc = ac.createOscillator();
+  const filter = ac.createBiquadFilter();
+  const gain = ac.createGain();
+
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(900, now);
+  osc.frequency.exponentialRampToValueAtTime(140, now + 0.9);
+
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(1800, now);
+  filter.frequency.exponentialRampToValueAtTime(400, now + 0.9);
+
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.18, now + 0.08);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ac.destination);
+  osc.start(now);
+  osc.stop(now + 0.95);
+}
 
 // ---- Input tracking ----
 const keysDown = new Set();
@@ -1054,7 +1160,7 @@ const flashOverlay = document.getElementById('flashOverlay');
 const hudCountry = document.getElementById('hudCountry');
 const hudVibe = document.getElementById('hudVibe');
 const hudStamps = document.getElementById('hudStamps');
-const hudLevel = document.getElementById('hudLevel');
+const muteBtn = document.getElementById('muteBtn');
 
 const titleScreen = document.getElementById('titleScreen');
 const startBtn = document.getElementById('startBtn');
@@ -1094,10 +1200,11 @@ const continueBtn = document.getElementById('continueBtn');
 const newGameBtn = document.getElementById('newGameBtn');
 
 function updateHUD() {
+  // Level is intentionally not shown (Section 5) — levelIndex still drives
+  // Vibe scaling internally, it's just no longer displayed in the HUD.
   hudCountry.textContent = `Country: ${currentLevel.country}`;
   hudVibe.textContent = `VIBE:${Math.round(vibeIndex)}`;
   hudStamps.textContent = `Stamps: ${stamps}`;
-  hudLevel.textContent = `Level: ${levelIndex}`;
   saveSession();
 }
 
@@ -1355,6 +1462,22 @@ quizOptionA.addEventListener('click', () => answerQuiz(0));
 quizOptionB.addEventListener('click', () => answerQuiz(1));
 restartBtn.addEventListener('click', restartGame);
 
+function updateMuteBtn() {
+  muteBtn.textContent = soundEnabled ? '🔊' : '🔇';
+  muteBtn.setAttribute('aria-label', soundEnabled ? 'Mute sound' : 'Unmute sound');
+}
+updateMuteBtn();
+
+muteBtn.addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  updateMuteBtn();
+  try {
+    localStorage.setItem('passportPanicSound', soundEnabled ? 'on' : 'off');
+  } catch (e) {
+    // ignore
+  }
+});
+
 // No country picker: every new game starts at DEFAULT_COUNTRY_IDX (Spain).
 // Every country after that is still chosen at random (see pickRandomCountryIndex()).
 startBtn.addEventListener('click', () => {
@@ -1418,6 +1541,7 @@ function startLevelTransition(nextIdx, nextCountryIdx, caption) {
   transitionNextCountryIdx = nextCountryIdx;
   transitionCaption = caption;
   transitionStartTime = performance.now();
+  planeSoundPlayed = false;
 }
 
 /* ---------------------------------------------------------------------
@@ -1480,6 +1604,10 @@ const SPEED = 3;
 function update() {
   if (gameState === 'transition') {
     const elapsed = performance.now() - transitionStartTime;
+    if (!planeSoundPlayed && elapsed >= STAMP_TOTAL_MS) {
+      planeSoundPlayed = true;
+      playAirplaneSound();
+    }
     if (elapsed >= TRANSITION_TOTAL_MS) {
       const nextIdx = transitionNextLevelIdx;
       const nextCountryIdx = transitionNextCountryIdx;
@@ -1553,11 +1681,64 @@ const PATH_SPECKLES = Array.from({ length: 260 }, () => ({
   r: 1 + Math.random() * 1.5
 }));
 
-// Dirt plaza path — the walkable floor, now the size of the whole world.
-// A subtle darker edge on two sides and scattered stone flecks give it depth.
-function drawFloor() {
+// Section 3: fixed motif positions reused by every ground pattern type, so
+// adding a new country never costs extra per-frame drawing — only which
+// shape gets drawn at each spot changes (see drawGroundPattern()).
+const GROUND_MOTIF_SPOTS = Array.from({ length: 90 }, () => ({
+  x: 40 + Math.random() * (WORLD_WIDTH - 80),
+  y: 40 + Math.random() * (WORLD_HEIGHT - 80)
+}));
+
+// Cheap, data-driven per-country ground texture — 4 reusable motifs (tile
+// grid, sand ripple, cobble fleck, packed-earth tuft) rather than bespoke
+// art per country. See CITY_STYLE_BY_LANDMARK's `ground` field.
+function drawGroundPattern(type) {
+  GROUND_MOTIF_SPOTS.forEach((p) => {
+    if (type === 'tile') {
+      ctx.strokeStyle = SCENE_PALETTE.dirtEdge;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(p.x - 9, p.y - 9, 18, 18);
+    } else if (type === 'sand') {
+      ctx.strokeStyle = SCENE_PALETTE.dirtEdge;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(p.x - 10, p.y);
+      ctx.quadraticCurveTo(p.x, p.y - 4, p.x + 10, p.y);
+      ctx.stroke();
+    } else if (type === 'cobble') {
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = SCENE_PALETTE.stoneDark;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    } else { // 'earth'
+      ctx.globalAlpha = 0.4;
+      ctx.strokeStyle = SCENE_PALETTE.leavesDark;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y + 5);
+      ctx.lineTo(p.x - 2, p.y - 4);
+      ctx.moveTo(p.x, p.y + 5);
+      ctx.lineTo(p.x + 2, p.y - 4);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  });
+}
+
+// Plaza floor, now the size of the whole world, tinted per-country (a low-
+// alpha wash of that level's accent color — every country already has one,
+// so no extra config is needed for the tint itself) with a matching ground
+// pattern motif and the original edge-shading/stone-fleck depth cues.
+function drawFloor(tintColor, groundPattern) {
   ctx.fillStyle = SCENE_PALETTE.dirt;
   ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+  ctx.globalAlpha = 0.14;
+  ctx.fillStyle = tintColor;
+  ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+  ctx.globalAlpha = 1;
 
   ctx.fillStyle = SCENE_PALETTE.dirtEdge;
   ctx.fillRect(0, 0, WORLD_WIDTH, 6);
@@ -1569,6 +1750,8 @@ function drawFloor() {
     ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
     ctx.fill();
   });
+
+  drawGroundPattern(groundPattern);
 }
 
 function drawLeafBlob(x, y, r) {
@@ -1739,34 +1922,52 @@ function drawCottage(x, y, w, h, opts) {
     ctx.moveTo(x + w / 2 + 5, y + roofH - 2);
     ctx.lineTo(x + w / 2 + 5, y + roofH + 8);
     ctx.stroke();
+  } else if (opts.icon === 'bed') { // Section 4: hotel sign
+    ctx.fillStyle = SCENE_PALETTE.woodDark;
+    ctx.fillRect(x + w / 2 - 7, y + roofH + 2, 14, 6);
+    ctx.beginPath();
+    ctx.arc(x + w / 2 - 4, y + roofH + 2, 3, Math.PI, 0);
+    ctx.fill();
+  } else if (opts.icon === 'mug') { // Section 4: bar sign
+    ctx.strokeStyle = SCENE_PALETTE.woodDark;
+    ctx.lineWidth = 2;
+    drawRoundedRect(x + w / 2 - 5, y + roofH, 8, 9, 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x + w / 2 + 4, y + roofH + 4, 3, -Math.PI / 2, Math.PI / 2);
+    ctx.stroke();
   }
 }
 
 // Maps each country's landmark to a roof style + wall tint for the
-// decorative background buildings, so every level's city reads with a
-// distinct silhouette matching that country's capital-city aesthetic.
+// decorative background buildings, PLUS (Section 3) a ground pattern —
+// one config per country, so every level's city AND ground reads with a
+// distinct look matching that country's capital-city aesthetic. Adding a
+// new country later only ever means adding one line here.
+// ground: 'tile' (paved/courtyard), 'sand' (desert), 'cobble' (plaza
+// cobblestone), or 'earth' (packed/park-like) — see drawGroundPattern().
 const CITY_STYLE_BY_LANDMARK = {
-  toriiGate:         { roof: 'pagoda',  wall: SCENE_PALETTE.wall },
-  eiffelTower:       { roof: 'mansard', wall: SCENE_PALETTE.wall },
-  pyramid:           { roof: 'dome',    wall: SCENE_PALETTE.stone },
-  colosseum:         { roof: 'tile',    wall: SCENE_PALETTE.wallShade },
-  christRedeemer:    { roof: 'tile',    wall: SCENE_PALETTE.wall },
-  indiaGate:         { roof: 'dome',    wall: SCENE_PALETTE.wallShade },
-  angelIndependence: { roof: 'tile',    wall: SCENE_PALETTE.wall },
-  watArun:           { roof: 'pagoda',  wall: SCENE_PALETTE.stone },
-  hassanTower:       { roof: 'dome',    wall: SCENE_PALETTE.stone },
-  brandenburgGate:   { roof: 'mansard', wall: SCENE_PALETTE.wallShade },
-  gwanghwamunGate:   { roof: 'pagoda',  wall: SCENE_PALETTE.wallShade },
-  parthenon:         { roof: 'tile',    wall: SCENE_PALETTE.wall },
-  limaCathedral:     { roof: 'tile',    wall: SCENE_PALETTE.wall },
-  anitkabir:         { roof: 'dome',    wall: SCENE_PALETTE.stone },
-  kiccTower:         { roof: 'tile',    wall: SCENE_PALETTE.wallShade },
-  osloCityHall:      { roof: 'mansard', wall: SCENE_PALETTE.wallShade },
-  onePillarPagoda:   { roof: 'pagoda',  wall: SCENE_PALETTE.wall },
-  puertaAlcala:      { roof: 'tile',    wall: SCENE_PALETTE.wall },
-  beehive:           { roof: 'dome',    wall: SCENE_PALETTE.wallShade },
-  obelisco:          { roof: 'mansard', wall: SCENE_PALETTE.wall },
-  placeholder:       { roof: 'tile',    wall: SCENE_PALETTE.wall }
+  toriiGate:         { roof: 'pagoda',  wall: SCENE_PALETTE.wall,      ground: 'tile' },
+  eiffelTower:       { roof: 'mansard', wall: SCENE_PALETTE.wall,      ground: 'cobble' },
+  pyramid:           { roof: 'dome',    wall: SCENE_PALETTE.stone,     ground: 'sand' },
+  colosseum:         { roof: 'tile',    wall: SCENE_PALETTE.wallShade, ground: 'cobble' },
+  christRedeemer:    { roof: 'tile',    wall: SCENE_PALETTE.wall,      ground: 'earth' },
+  indiaGate:         { roof: 'dome',    wall: SCENE_PALETTE.wallShade, ground: 'tile' },
+  angelIndependence: { roof: 'tile',    wall: SCENE_PALETTE.wall,      ground: 'cobble' },
+  watArun:           { roof: 'pagoda',  wall: SCENE_PALETTE.stone,     ground: 'tile' },
+  hassanTower:       { roof: 'dome',    wall: SCENE_PALETTE.stone,     ground: 'sand' },
+  brandenburgGate:   { roof: 'mansard', wall: SCENE_PALETTE.wallShade, ground: 'cobble' },
+  gwanghwamunGate:   { roof: 'pagoda',  wall: SCENE_PALETTE.wallShade, ground: 'tile' },
+  parthenon:         { roof: 'tile',    wall: SCENE_PALETTE.wall,      ground: 'cobble' },
+  limaCathedral:     { roof: 'tile',    wall: SCENE_PALETTE.wall,      ground: 'cobble' },
+  anitkabir:         { roof: 'dome',    wall: SCENE_PALETTE.stone,     ground: 'tile' },
+  kiccTower:         { roof: 'tile',    wall: SCENE_PALETTE.wallShade, ground: 'earth' },
+  osloCityHall:      { roof: 'mansard', wall: SCENE_PALETTE.wallShade, ground: 'cobble' },
+  onePillarPagoda:   { roof: 'pagoda',  wall: SCENE_PALETTE.wall,      ground: 'tile' },
+  puertaAlcala:      { roof: 'tile',    wall: SCENE_PALETTE.wall,      ground: 'cobble' },
+  beehive:           { roof: 'dome',    wall: SCENE_PALETTE.wallShade, ground: 'earth' },
+  obelisco:          { roof: 'mansard', wall: SCENE_PALETTE.wall,      ground: 'cobble' },
+  placeholder:       { roof: 'tile',    wall: SCENE_PALETTE.wall,      ground: 'earth' }
 };
 function getCityStyle(level) {
   return CITY_STYLE_BY_LANDMARK[level.landmark] || CITY_STYLE_BY_LANDMARK.placeholder;
@@ -1775,25 +1976,17 @@ function getCityStyle(level) {
 // Non-interactive scenery scattered across the world, purely for atmosphere
 // (never blocks movement or carries game logic). Positions are fixed and
 // reused every level; only the roof/wall style is re-themed per country.
+// Purely atmospheric background buildings — the REAL interactive café,
+// hotel, bar, and sign are drawn at the fixed slot positions (see
+// drawSlotStructure()) so there's no duplicate/confusing "second café."
 function drawDecorations(cityStyle) {
   drawTree(40, 60, 0.9);
   drawTree(900, 55, 0.8);
   drawTree(1320, 830, 0.9);
   drawTree(60, 840, 0.8);
 
-  drawCottage(150, 540, 70, 62, { roof: cityStyle.roof, wall: cityStyle.wall });
-  drawCottage(560, 470, 70, 62, { roof: cityStyle.roof, wall: cityStyle.wall });
-  drawCottage(900, 760, 70, 62, { roof: cityStyle.roof, wall: cityStyle.wall });
-  drawCottage(1180, 120, 70, 62, { roof: cityStyle.roof, wall: cityStyle.wall });
-
-  drawCottage(300, 110, 54, 46, {
-    roof: cityStyle.roof, wall: cityStyle.wall, door: false, window: true,
-    awning: true, awningColor: SCENE_PALETTE.roofTile, icon: 'cup'
-  }); // café
-
-  drawCottage(640, 800, 54, 46, {
-    roof: cityStyle.roof, wall: cityStyle.wall, door: false, window: true, icon: 'forkKnife'
-  }); // restaurant
+  drawCottage(150, 540, 64, 56, { roof: cityStyle.roof, wall: cityStyle.wall });
+  drawCottage(1180, 120, 64, 56, { roof: cityStyle.roof, wall: cityStyle.wall });
 }
 
 // Simple wooden bench, drawn next to the landmark at the end of the map.
@@ -1807,18 +2000,32 @@ function drawBench(x, y) {
   ctx.fillRect(x + 37, y + 21, 5, 13); // front-right leg
 }
 
-// The country's capital landmark, drawn large at the far end of the map —
-// reuses the same glyph as the passport stamp (drawStampIcon), just scaled
-// way up, so each country's art is only ever authored once.
+// Section 6: the country's capital landmark, drawn large at the far end
+// of the map — reuses the same glyph as the passport stamp (drawStampIcon)
+// just scaled way up, so each country's art is only ever authored once.
+// A bold dark outline behind a colorful accent-tinted fill (a cheap
+// two-pass "poor man's outline" — draw the shape slightly bigger in ink,
+// then again at normal size in the accent color on top) gives all 20
+// landmarks a bolder, more cartoon-y silhouette with zero bespoke redraws.
 function drawWorldLandmark(type, country) {
   const pos = LAYOUT.landmarkPos;
   ctx.save();
   ctx.translate(pos.x, pos.y);
   ctx.scale(6, 6);
+
+  ctx.save();
+  ctx.scale(1.12, 1.12); // slightly larger "ink" pass forms the outline halo
   ctx.fillStyle = SCENE_PALETTE.woodDark;
   ctx.strokeStyle = SCENE_PALETTE.woodDark;
+  ctx.lineWidth = 1;
+  drawStampIcon(type);
+  ctx.restore();
+
+  ctx.fillStyle = currentLevel.accent;
+  ctx.strokeStyle = currentLevel.accent;
   ctx.lineWidth = 0.6;
   drawStampIcon(type);
+
   ctx.restore();
 
   drawTextLabel(country.toUpperCase(), pos.x, pos.y + 145);
@@ -1934,6 +2141,76 @@ function drawSignpostSlot(tile) {
   ctx.arc(cx, cy - tile.h * 0.14, 4, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
+}
+
+// Section 4: a visible stone path with a dashed centerline, connecting the
+// entry point through every building/sign to the landmark — so the map
+// reads clearly without needing instructions. Same waypoints every level.
+function drawGuidingPath() {
+  ctx.strokeStyle = SCENE_PALETTE.stone;
+  ctx.lineWidth = 22;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  PATH_WAYPOINTS.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.stroke();
+
+  ctx.strokeStyle = SCENE_PALETTE.wallShade;
+  ctx.lineWidth = 3;
+  ctx.setLineDash([14, 14]);
+  ctx.beginPath();
+  PATH_WAYPOINTS.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// Section 4: every interactive object gets the same "you can engage here"
+// affordance — a soft pulsing glow at its base plus a small bouncing
+// marker above it — shown only while the player is standing on it (this
+// game has no mouse, so proximity is the equivalent of a hover state).
+function drawInteractionHint(cx, topY) {
+  const t = performance.now() / 300;
+  const bounce = Math.sin(t) * 4;
+
+  ctx.save();
+  ctx.globalAlpha = 0.3 + Math.sin(t) * 0.15;
+  ctx.fillStyle = currentLevel.accent;
+  ctx.beginPath();
+  ctx.ellipse(cx, topY + 50, 28, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = currentLevel.accent;
+  ctx.strokeStyle = SCENE_PALETTE.woodDark;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, topY - 16 + bounce, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+// Section 4: the 3 buildings (café/hotel/bar) share the cottage renderer
+// with a role-specific icon; the sign keeps the existing signpost art —
+// giving all 4 slots distinct, recognizable identities while the
+// clue-vs-hazard content assigned to each still rotates per level (see
+// SLOT_ROLES above for why this doesn't reveal the disguised outcome).
+function drawSlotStructure(slotKey, tile, cityStyle) {
+  const role = SLOT_ROLES[slotKey];
+  if (role === 'sign') {
+    drawSignpostSlot(tile);
+    return;
+  }
+  const x = tile.x + 3, y = tile.y + 2, w = tile.w - 6, h = tile.h - 4;
+  if (role === 'cafe') {
+    drawCottage(x, y, w, h, {
+      roof: cityStyle.roof, wall: cityStyle.wall, door: false, window: true,
+      awning: true, awningColor: SCENE_PALETTE.roofTile, icon: 'cup'
+    });
+  } else if (role === 'hotel') {
+    drawCottage(x, y, w, h, { roof: cityStyle.roof, wall: cityStyle.wall, door: true, window: true, icon: 'bed' });
+  } else if (role === 'bar') {
+    drawCottage(x, y, w, h, { roof: cityStyle.roof, wall: cityStyle.wall, door: false, window: true, icon: 'mug' });
+  }
 }
 
 // Small simplified glyph per country, drawn centered at the origin so it
@@ -2097,6 +2374,37 @@ function drawStampIcon(type) {
   }
 }
 
+// Section 2: a classic scalloped/perforated postage-stamp edge — small
+// outward "teeth" traced as one path, then stroked, instead of a plain
+// circle. Reused for every country's stamp; the flourish is what makes it
+// feel like a real stamp rather than a plain ink ring.
+function drawScallopedRing(radius, teeth, toothDepth) {
+  ctx.beginPath();
+  for (let i = 0; i < teeth; i++) {
+    const a0 = (i / teeth) * Math.PI * 2;
+    const aMid = ((i + 0.5) / teeth) * Math.PI * 2;
+    const a1 = ((i + 1) / teeth) * Math.PI * 2;
+    if (i === 0) ctx.moveTo(Math.cos(a0) * radius, Math.sin(a0) * radius);
+    else ctx.lineTo(Math.cos(a0) * radius, Math.sin(a0) * radius);
+    ctx.lineTo(Math.cos(aMid) * (radius + toothDepth), Math.sin(aMid) * (radius + toothDepth));
+    ctx.lineTo(Math.cos(a1) * radius, Math.sin(a1) * radius);
+  }
+  ctx.closePath();
+}
+
+// Small 4-point sparkle flourish — a cheap, cute "polish" accent, reused
+// on every stamp rather than authoring bespoke per-country flourishes.
+function drawSparkle(cx, cy, size) {
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - size);
+  ctx.quadraticCurveTo(cx, cy, cx + size, cy);
+  ctx.quadraticCurveTo(cx, cy, cx, cy + size);
+  ctx.quadraticCurveTo(cx, cy, cx - size, cy);
+  ctx.quadraticCurveTo(cx, cy, cx, cy - size);
+  ctx.closePath();
+  ctx.fill();
+}
+
 // Country-specific passport stamp: pops in, holds, then fades/clears.
 function drawStampAnimation(elapsed) {
   let scale, alpha;
@@ -2113,7 +2421,7 @@ function drawStampAnimation(elapsed) {
     alpha = 1 - t; // clears from the screen
   }
 
-  const radius = 74;
+  const radius = 70;
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
   ctx.translate(canvas.width / 2, canvas.height / 2 - 10);
@@ -2124,9 +2432,8 @@ function drawStampAnimation(elapsed) {
   // color) so it reliably contrasts against the cream page background,
   // regardless of which color a given country picked as its accent.
   ctx.strokeStyle = SCENE_PALETTE.woodDark;
-  ctx.lineWidth = 11;
-  ctx.beginPath();
-  ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  ctx.lineWidth = 4;
+  drawScallopedRing(radius, 22, 5); // perforated postage-stamp edge
   ctx.stroke();
   ctx.lineWidth = 6;
   ctx.beginPath();
@@ -2146,11 +2453,17 @@ function drawStampAnimation(elapsed) {
   ctx.lineWidth = 5;
   drawStampIcon(currentLevel.landmark);
 
+  // small sparkle flourishes flanking the icon, in the country's accent
+  ctx.fillStyle = currentLevel.accent;
+  drawSparkle(-radius + 22, 6, 5);
+  drawSparkle(radius - 22, 6, 4);
+
+  ctx.fillStyle = SCENE_PALETTE.woodDark;
   ctx.font = "bold 15px 'Segoe UI', Arial, sans-serif";
   ctx.textAlign = 'center';
-  ctx.fillText(currentLevel.country.toUpperCase(), 0, radius - 20);
-  ctx.font = "bold 11px 'Segoe UI', Arial, sans-serif";
-  ctx.fillText('PASSPORT CONTROL', 0, -radius + 24);
+  ctx.fillText(currentLevel.country.toUpperCase(), 0, radius - 22);
+  ctx.font = "bold 10px 'Segoe UI', Arial, sans-serif";
+  ctx.fillText('★ PASSPORT CONTROL ★', 0, -radius + 26);
   ctx.restore();
 
   ctx.globalAlpha = 1;
@@ -2160,38 +2473,55 @@ function drawStampAnimation(elapsed) {
   ctx.fillText(transitionCaption, canvas.width / 2, canvas.height - 40);
 }
 
-// Simple rounded airplane silhouette, drawn centered at the origin.
+// Section 2: cute, rounded cartoon airplane — cream fuselage + bold dark
+// outline (matching the passport page's ink-on-cream look), with the
+// country's accent color on the tail/wings as a friendly flourish.
 function drawPlaneShape() {
-  ctx.fillStyle = SCENE_PALETTE.woodDark;
-  ctx.fillRect(-30, -4, 60, 8); // fuselage
-  ctx.beginPath(); // nose
-  ctx.moveTo(30, -4);
-  ctx.lineTo(42, 0);
-  ctx.lineTo(30, 4);
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = SCENE_PALETTE.woodDark;
+
+  // tail fin (rounded, drawn first so the fuselage overlaps its base)
+  ctx.fillStyle = currentLevel.accent;
+  ctx.beginPath();
+  ctx.moveTo(-20, -6);
+  ctx.quadraticCurveTo(-34, -22, -26, -5);
   ctx.closePath();
   ctx.fill();
-  ctx.beginPath(); // tail fin
-  ctx.moveTo(-30, -4);
-  ctx.lineTo(-38, -16);
-  ctx.lineTo(-22, -4);
+  ctx.stroke();
+
+  // wings — rounded teardrops, top and bottom
+  ctx.beginPath();
+  ctx.moveTo(-2, -7);
+  ctx.quadraticCurveTo(-16, -24, 8, -8);
   ctx.closePath();
   ctx.fill();
-  ctx.beginPath(); // top wing
-  ctx.moveTo(-4, -4);
-  ctx.lineTo(-14, -20);
-  ctx.lineTo(4, -4);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-2, 7);
+  ctx.quadraticCurveTo(-16, 24, 8, 8);
   ctx.closePath();
   ctx.fill();
-  ctx.beginPath(); // bottom wing
-  ctx.moveTo(-4, 4);
-  ctx.lineTo(-14, 20);
-  ctx.lineTo(4, 4);
-  ctx.closePath();
-  ctx.fill();
+  ctx.stroke();
+
+  // rounded cream fuselage
   ctx.fillStyle = SCENE_PALETTE.wall;
   ctx.beginPath();
-  ctx.arc(8, 0, 3, 0, Math.PI * 2); // little cabin window
+  ctx.ellipse(0, 0, 30, 11, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.stroke();
+
+  // rounded nose cap
+  ctx.beginPath();
+  ctx.arc(28, 0, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // round cockpit porthole
+  ctx.fillStyle = SCENE_PALETTE.stone;
+  ctx.beginPath();
+  ctx.arc(12, -2, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
 }
 
 // Airplane flies across the screen on a gentle arc before the next level loads.
@@ -2251,13 +2581,23 @@ function render() {
   ctx.save();
   ctx.translate(-camera.x, -camera.y);
 
-  drawFloor();
+  drawFloor(currentLevel.accent, cityStyle.ground);
+  drawGuidingPath();
   drawHedgeBorder();
   drawDecorations(cityStyle);
 
-  // Disguised encounter slots — identical appearance whether they hold
-  // a clue or a hazard; content only revealed after engaging with them.
-  SLOT_KEYS.forEach((slotKey) => drawSignpostSlot(LAYOUT[slotKey]));
+  const pRect = playerRect();
+
+  // 3 buildings (café/hotel/bar) + 1 sign — every slot interactive, each
+  // with a distinct look. Content (clue vs. hazard) still rotates per
+  // level and only reveals on engaging — see drawSlotStructure() above.
+  SLOT_KEYS.forEach((slotKey) => {
+    const tile = LAYOUT[slotKey];
+    drawSlotStructure(slotKey, tile, cityStyle);
+    if (rectsOverlap(pRect, tile)) {
+      drawInteractionHint(tile.x + tile.w / 2, tile.y);
+    }
+  });
 
   // The far end of the map: the country's capital landmark, a bench, and
   // the customs officer (accent-tinted cap) who administers the quiz.
@@ -2269,6 +2609,9 @@ function render() {
     24,
     currentLevel.accent
   );
+  if (rectsOverlap(pRect, LAYOUT.officer)) {
+    drawInteractionHint(LAYOUT.officer.x + LAYOUT.officer.w / 2, LAYOUT.officer.y);
+  }
   drawTextLabel('CUSTOMS', LAYOUT.officer.x + LAYOUT.officer.w / 2, LAYOUT.officer.y + LAYOUT.officer.h + 30);
 
   // Player
